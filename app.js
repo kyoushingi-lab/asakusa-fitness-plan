@@ -2,7 +2,7 @@
 (function () {
   'use strict';
     function initWeightHistory(read, write, loads, localDay) {
-    var names = {pulldown:'高位下拉',row:'坐姿划船',chest:'胸推',triceps:'三头肌',abs:'腹肌训练',legpress:'腿推',glute:'臀推',legcurl:'腿弯举',abductor:'髋外展'};
+    var names = {pulldown:'高位下拉',row:'坐姿划船',chest:'坐姿胸推',triceps:'三头肌训练机',abs:'腹肌训练机',legpress:'腿举机',glute:'臀部训练机',legcurl:'卧姿腿弯举',abductor:'髋外展机'};
     var historyKey = 'gym-compatible.history.v1';
     var pendingKey = 'gym-compatible.pending.v1';
     var raw = read(historyKey), entries = [], locked = false, timers = {}, pending = {};
@@ -132,8 +132,8 @@
 
     function initCloudSync(history,read,write){
     var status=document.getElementById('syncStatus'),form=document.getElementById('syncLogin');
-    var email=document.getElementById('syncEmail'),code=document.getElementById('syncCode');
-    var send=document.getElementById('syncSend'),verify=document.getElementById('syncVerify');
+    var email=document.getElementById('syncEmail');
+    var send=document.getElementById('syncSend');
     var manual=document.getElementById('syncNow'),logout=document.getElementById('syncLogout');
     var account=document.getElementById('syncAccount'),client=null,user=null,busy=false,rerun=false,timer=null,epoch=0;
     var ownerKey='gym-compatible.sync-owner.v1';
@@ -181,22 +181,16 @@
       finally{busy=false;if(rerun){rerun=false;window.clearTimeout(timer);timer=window.setTimeout(sync,1500);}}
     }
     history.subscribe(function(){if(user&&!busy){window.clearTimeout(timer);timer=window.setTimeout(sync,1500);}else if(user)rerun=true;});
-    form.addEventListener('submit',function(event){event.preventDefault();});
+    form.addEventListener('submit',function(event){event.preventDefault();if(!send.disabled)send.click();});
     send.addEventListener('click',async function(){
       if(!email.reportValidity()||!email.value.trim())return;
-      send.disabled=true;say('正在发送登录验证码…');
+      send.disabled=true;say('正在发送登录链接…');
       try{
-        var result=await client.auth.signInWithOtp({email:email.value.trim(),options:{shouldCreateUser:true}});
+        var result=await client.auth.signInWithOtp({email:email.value.trim(),options:{shouldCreateUser:true,emailRedirectTo:new URL('./',window.location.href).href}});
         if(result.error)throw result.error;
-        code.disabled=false;verify.disabled=false;say('验证码已发送。请在邮箱查收，并在本页输入验证码；手机和电脑使用同一个邮箱。');code.focus();
+        say('登录链接已发送。请在这台设备打开邮箱，点邮件里的登录链接返回本页。手机和电脑使用同一个邮箱。');
         window.setTimeout(function(){send.disabled=false;},60000);
-      }catch(error){send.disabled=false;say('验证码发送失败：'+error.message);}
-    });
-    verify.addEventListener('click',async function(){
-      if(!email.reportValidity()||!code.reportValidity()||!code.value.trim())return;
-      verify.disabled=true;
-      try{var result=await client.auth.verifyOtp({email:email.value.trim(),token:code.value.trim(),type:'email'});if(result.error)throw result.error;code.value='';connected(result.data.session);}
-      catch(error){say('登录未成功：'+error.message);verify.disabled=false;}
+      }catch(error){send.disabled=false;say('登录邮件发送失败：'+error.message);}
     });
     logout.addEventListener('click',async function(){
       epoch++;user=null;window.clearTimeout(timer);
@@ -218,7 +212,7 @@
   function storageMessage() {
     status.textContent = volatile
       ? '当前无法保存到浏览器；本页可继续打卡和填写重量，关闭或刷新后临时记录会丢失。'
-      : '记录自动保存在当前浏览器。更换浏览器、网页地址或清理网站数据后，记录不会同步。';
+      : document.getElementById('syncStatus') ? '本机记录自动保存。手机与电脑的同步状态见下方；清理网站数据前请导出备份。' : '记录自动保存在当前浏览器。更换浏览器、网页地址或清理网站数据后，记录不会同步。';
   }
   function read(key) {
     if (Object.prototype.hasOwnProperty.call(memory, key)) return memory[key];

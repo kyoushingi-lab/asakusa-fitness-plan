@@ -1,0 +1,13 @@
+{
+  "name": "asakusa-fitness-plan",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Mobile fitness plan and dated weight history",
+  "scripts": {
+    "test:webkit": "node tests/interactions.cjs index.html webkit && node tests/cloud.cjs webkit",
+    "test:chromium": "node tests/interactions.cjs index.html chromium && node tests/cloud.cjs chromium"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}
