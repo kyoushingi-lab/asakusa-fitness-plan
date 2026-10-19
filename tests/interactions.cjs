@@ -140,6 +140,14 @@ async function main() {
     await p.clock.fastForward(1200);
     assert.equal(await p.locator('#historyRows tr').count(),2);
   });
+  await test('machine micro-weights such as 3.75 and 11.25 kg are valid dated records', async p=>{
+    await frozen(p);await p.locator('#mon-chest input.load').fill('11.25');await p.clock.fastForward(1200);
+    assert.equal(await p.locator('#mon-chest input.load').evaluate(e=>e.validity.valid),true);
+    assert.match(await text(p,'#historyRows'),/11\.25 kg/);
+    await p.locator('#mon-row input.load').fill('3.75');await p.clock.fastForward(1200);
+    assert.equal(await p.locator('#historyRows tr').count(),2);
+    await p.reload();assert.equal(await p.locator('#mon-chest input.load').inputValue(),'11.25');
+  });
   await test('history JSON export restores dates and weights in another browser without duplicating imports', async (p,c) => {
     await frozen(p);await p.locator('#mon-row input.load').fill('22.5');
     const downloadEvent=p.waitForEvent('download');await p.locator('#exportHistory').click();

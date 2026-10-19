@@ -11,7 +11,7 @@
     var rows = document.getElementById('historyRows');
     function valid(entry) {
       if (!entry || !Object.prototype.hasOwnProperty.call(names,entry.exercise) || typeof entry.id !== 'string' || entry.id.length>120) return false;
-      if (typeof entry.kg !== 'number' || !Number.isFinite(entry.kg) || entry.kg<0 || entry.kg%0.5!==0) return false;
+      if (typeof entry.kg !== 'number' || !Number.isFinite(entry.kg) || entry.kg<0 || entry.kg>9999) return false;
       if (typeof entry.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return false;
       var date = new Date(entry.date+'T00:00:00Z');
       return !isNaN(date) && date.toISOString().slice(0,10)===entry.date && typeof entry.at==='string' && !isNaN(Date.parse(entry.at)) && typeof entry.time==='string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(entry.time);
@@ -97,7 +97,7 @@
           var data=JSON.parse(reader.result);
           if(data.app!=='asakusa-fitness'||data.version!==1||!Array.isArray(data.entries)||data.entries.length>10000||!data.entries.every(valid))throw new Error('Invalid backup');
           var latest=data.latest||{};
-          Object.keys(latest).forEach(function(key){var value=latest[key];if(!Object.prototype.hasOwnProperty.call(names,key)||typeof value!=='string'||(value!==''&&(!/^\d+(\.\d+)?$/.test(value)||!Number.isFinite(Number(value))||Number(value)%0.5!==0)))throw new Error('Invalid weight');});
+          Object.keys(latest).forEach(function(key){var value=latest[key];if(!Object.prototype.hasOwnProperty.call(names,key)||typeof value!=='string'||(value!==''&&(!/^\d+(\.\d+)?$/.test(value)||!Number.isFinite(Number(value))||Number(value)>9999)))throw new Error('Invalid weight');});
           flush();var ids=new Set(entries.map(function(e){return e.id;})),added=0;
           data.entries.forEach(function(entry){if(!ids.has(entry.id)){entries.push({id:entry.id,exercise:entry.exercise,kg:entry.kg,date:entry.date,time:entry.time,at:entry.at});ids.add(entry.id);added++;}});
           if(locked&&raw)write(historyKey+'.recovery',raw);
@@ -256,7 +256,7 @@
       var value = this.value;
       if (!this.validity.valid) {
         this.setAttribute('aria-invalid', 'true');
-        document.getElementById('weightStatus').textContent = '重量请输入不小于 0、以 0.5 kg 为步进的数字；无效数值不会保存。';
+        document.getElementById('weightStatus').textContent = '重量请输入 0～9999 kg 之间的数字，可填写 3.75、11.25 等小配重；无效数值不会保存。';
         return;
       }
       this.removeAttribute('aria-invalid');
