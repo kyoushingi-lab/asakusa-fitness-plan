@@ -2,7 +2,7 @@
 
 网页：<https://kyoushingi-lab.github.io/asakusa-fitness-plan/>
 
-当前发布版已启用本地日期重量历史。跨设备同步代码已准备，连接数据库并完成权限验证之前，`cloud-config.js` 保持未启用；页面会显示“同步服务暂未连接”。
+已启用本地日期重量历史和 Supabase 跨设备同步。未登录时保存到本机；手机、电脑分别通过同一个邮箱登录后，自动合并日期和重量。
 
 周一、周三、周五训练计划，9 种器械的实物参考图与视频，15 张可展开说明卡，训练打卡、日期重量历史、备份导入导出、30 分钟爬坡计时和饮食建议。
 
@@ -42,6 +42,8 @@ GitHub Pages 使用 `main` 分支的根目录。更新这些文件并提交到 `
 
 安装测试依赖后，运行 `npx playwright install webkit chromium`，再运行 `npm run test:webkit` 或 `npm run test:chromium`。测试使用隔离的浏览器环境，不会读取个人浏览器记录；同步测试使用真实客户端与模拟服务，不会发送真实登录邮件。
 
-启用同步前，在本项目执行 `supabase/schema.sql`，再运行 `supabase/verify-rls.sql` 验证不同账号与未登录访问隔离。验证脚本的模拟账号和记录会在事务中回滚。网页只填写允许公开的 publishable key，不能填写 secret key、service_role key 或数据库密码。
+现有 Supabase 项目已建立重量表并启用按账号隔离的访问策略，不必重复执行建表 SQL。`supabase/schema.sql` 用于新项目初始化，`supabase/verify-rls.sql` 验证不同账号与未登录访问隔离，其测试账号和记录会在事务中回滚。网页只填写允许公开的 publishable key，不能填写 secret key、service_role key 或数据库密码。
+
+2026-10-20 使用独立临时账号、真实登录会话和真实数据库 API，通过 7 项场景：电脑上传及手机模式读取、断网补传、重复记录处理、跨账号与匿名访问隔离、禁止覆盖和删除历史、刷新恢复登录记录。真实邮箱链接投递和 iPhone 真机尚待用户验证；这些测试没有发送邮件。
 
 免费服务的默认登录邮件提供一次性登录链接。将 Supabase 的 Site URL 设为本网页完整地址，手机和电脑分别通过同一个邮箱的登录链接进入网页。默认邮件服务只适合项目所有者／团队成员的邮箱；扩大到其他使用者需单独配置邮件服务。

@@ -10,7 +10,7 @@ create table public.weight_entries (
   primary key (user_id,id)
 );
 alter table public.weight_entries enable row level security;
-revoke all on public.weight_entries from anon, authenticated;
+revoke all on public.weight_entries from PUBLIC, anon, authenticated;
 grant select, insert on public.weight_entries to authenticated;
 create policy "read own weight history" on public.weight_entries for select to authenticated using ((select auth.uid())=user_id);
 create policy "append own weight history" on public.weight_entries for insert to authenticated with check ((select auth.uid())=user_id);
