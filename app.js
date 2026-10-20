@@ -206,80 +206,100 @@
   }
 
     function initFlexibleSchedule(read, write, localDay) {
-    var select=document.getElementById('cycleNext');
-    if(!select)return;
-    var complete=document.getElementById('cycleComplete'),undo=document.getElementById('cycleUndo');
-    var busyDate=document.getElementById('busyDate'),busyToggle=document.getElementById('busyToggle');
-    var status=document.getElementById('cycleStatus'),key='gym-compatible.rotation.v1';
+    var select=document.getElementById('cycleNext');if(!select)return;
+    var key='gym-compatible.rotation.v1',state={version:1,next:'a',sessions:[],busy:[]},locked=false;
     var plans={a:{name:'背＋手臂＋腹',anchor:'mon'},b:{name:'臀腿＋腹',anchor:'wed'},c:{name:'背＋臀综合',anchor:'fri'}};
-    var state={version:1,next:'a',sessions:[],busy:[]},locked=false,shownDay=localDay();
-    function validDate(date) {
-      if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date))return false;
-      var parsed=new Date(date+'T00:00:00Z');
-      return !isNaN(parsed)&&parsed.toISOString().slice(0,10)===date;
-    }
-    try {
+    var dateInput=document.getElementById('cycleDate'),complete=document.getElementById('cycleComplete');
+    var edit=document.getElementById('cycleEdit'),remove=document.getElementById('cycleUndo'),cancel=document.getElementById('cycleCancel');
+    var busy=document.getElementById('busyToggle'),restore=document.getElementById('cycleRestore'),status=document.getElementById('cycleStatus');
+    var selectedDay=localDay(),selectedPlan='a',editing=false,shownDay=localDay(),lastState=null;
+    function validDate(d){if(typeof d!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(d))return false;var p=new Date(d+'T00:00:00Z');return !isNaN(p)&&p.toISOString().slice(0,10)===d;}
+    function dayString(d){return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
+    function monday(d){var p=new Date(d+'T12:00:00');p.setDate(p.getDate()-(p.getDay()+6)%7);return dayString(p);}
+    function offset(d,n){var p=new Date(d+'T12:00:00');p.setDate(p.getDate()+n);return dayString(p);}
+    function next(plan){return{a:'b',b:'c',c:'a'}[plan];}
+    function session(d){return state.sessions.find(function(s){return s.date===d;});}
+    function ordered(){return state.sessions.slice().sort(function(a,b){return a.date.localeCompare(b.date);});}
+    try{
       var raw=read(key);
-      if(raw){
-        var saved=JSON.parse(raw);
+      if(raw){var saved=JSON.parse(raw);
         if(!saved||saved.version!==1||!Object.prototype.hasOwnProperty.call(plans,saved.next)||!Array.isArray(saved.sessions)||!Array.isArray(saved.busy)||saved.sessions.length>10000||saved.busy.length>10000)throw new Error('Invalid schedule');
         if(!saved.sessions.every(function(s){return s&&validDate(s.date)&&Object.prototype.hasOwnProperty.call(plans,s.plan)&&typeof s.at==='string'&&!isNaN(Date.parse(s.at));})||!saved.busy.every(validDate))throw new Error('Invalid entries');
         if(new Set(saved.sessions.map(function(s){return s.date;})).size!==saved.sessions.length)throw new Error('Repeated day');
         state={version:1,next:saved.next,sessions:saved.sessions.map(function(s){return{date:s.date,plan:s.plan,at:s.at};}),busy:Array.from(new Set(saved.busy))};
       }
     }catch(error){locked=true;}
+    selectedPlan=state.next;var week=monday(selectedDay);
+    function text(el,value){if(el.textContent!==value)el.textContent=value;}
+    function remember(){lastState=JSON.stringify(state);}
     function save(){if(!locked)write(key,JSON.stringify(state));}
-    function currentSession(){return state.sessions.find(function(s){return s.date===localDay();});}
-    function busyLabel(){
-      var label=state.busy.indexOf(busyDate.value)!==-1?'取消这天的忙碌标记':'标记这天忙碌';
-      if(busyToggle.textContent!==label)busyToggle.textContent=label;
+    function recalculate(fallback){var items=ordered();state.next=items.length?next(items[items.length-1].plan):fallback;}
+    function chooseDay(d){selectedDay=d;editing=false;selectedPlan=state.next;if(validDate(d))week=monday(d);render();}
+    function chooseAnotherDay(){selectedDay='';selectedPlan=state.next;editing=false;render();dateInput.focus();status.textContent='请选择 '+state.next.toUpperCase()+' 实际完成的日期。还没训练时，可以先查看动作，在训练当天回来记录。';}
+    function beginEdit(d){var found=session(d);if(!found||locked)return;selectedDay=d;selectedPlan=found.plan;week=monday(d);editing=true;render();dateInput.focus();}
+    function calendar(){
+      var grid=document.getElementById('cycleCalendar');grid.replaceChildren();
+      text(document.getElementById('cycleWeekTitle'),week+' 至 '+offset(week,6)+' · 点日期查看或记录');
+      for(var i=0;i<7;i++){
+        var d=offset(week,i),s=session(d),isBusy=state.busy.indexOf(d)!==-1,button=document.createElement('button');
+        button.type='button';button.dataset.date=d;button.disabled=locked;
+        button.className=(d===selectedDay?'is-selected ':'')+(d===localDay()?'is-today ':'')+(s?'has-session ':isBusy?'is-busy ':'');
+        button.setAttribute('aria-pressed',String(d===selectedDay));button.setAttribute('aria-label',d+' '+(s?s.plan.toUpperCase()+'已完成':isBusy?'忙碌':'未记录'));
+        var day=document.createElement('small'),num=document.createElement('strong'),mark=document.createElement('span');
+        day.textContent=['一','二','三','四','五','六','日'][i];num.textContent=String(Number(d.slice(-2)));mark.textContent=s?s.plan.toUpperCase()+'完成':isBusy?'忙碌':d===localDay()?'今天':'—';
+        button.appendChild(day);button.appendChild(num);button.appendChild(mark);
+        button.addEventListener('click',function(){chooseDay(this.dataset.date);});grid.appendChild(button);
+      }
     }
-    function render() {
-      var today=localDay(),session=currentSession(),busy=state.busy.indexOf(today)!==-1,plan=state.next;
-      if(shownDay!==today&&busyDate.value===shownDay)busyDate.value=today;
-      shownDay=today;
-      select.value=plan;select.disabled=locked;
-      document.getElementById('cycleRecommendation').textContent='下一次：'+plan.toUpperCase()+' · '+plans[plan].name;
-      var go=document.getElementById('cycleGo');go.href='#'+plans[plan].anchor;go.textContent='查看 '+plan.toUpperCase()+' 的动作 ↓';
-      complete.disabled=locked||!!session||busy;complete.textContent=session?'今天已记录 '+session.plan.toUpperCase()+' 训练':'记录今天完成 '+plan.toUpperCase();
-      undo.hidden=!session;undo.disabled=locked||!session;
-      busyDate.disabled=locked;busyToggle.disabled=locked;
-      if(!busyDate.value)busyDate.value=today;
-      busyLabel();
-      var start=new Date(today+'T12:00:00');start.setDate(start.getDate()-(start.getDay()+6)%7);
-      var monday=start.getFullYear()+'-'+('0'+(start.getMonth()+1)).slice(-2)+'-'+('0'+start.getDate()).slice(-2);
-      var count=state.sessions.filter(function(s){return s.date>=monday&&s.date<=today;}).length;
-      document.getElementById('cycleWeek').textContent='本周已完成 '+count+' 次；每周2次或3次都可以，下一周继续循环。';
-      document.getElementById('cycleBusyList').textContent=state.busy.length?'忙碌日：'+state.busy.slice().sort().slice(-30).join('、'):'暂无忙碌日记录。';
+    function render(){
+      var today=localDay(),entry=session(selectedDay),isBusy=state.busy.indexOf(selectedDay)!==-1,future=validDate(selectedDay)&&selectedDay>today;
+      dateInput.value=selectedDay;dateInput.disabled=locked;select.value=selectedPlan;select.disabled=locked;
+      text(document.getElementById('cycleRecommendation'),'下一次：'+state.next.toUpperCase()+' · '+plans[state.next].name);
+      document.querySelectorAll('#cycleTrack button').forEach(function(button){var p=button.dataset.plan;button.disabled=locked;button.className=(p===state.next?'is-next ':'')+(p===selectedPlan?'is-selected':'');button.setAttribute('aria-pressed',String(p===selectedPlan));var last=ordered().filter(function(s){return s.plan===p;}).pop();text(button.querySelector('.cycle-plan-state'),p===state.next?'下一次':last?'最近 '+last.date.slice(5):'尚未记录');});
+      var go=document.getElementById('cycleGo');go.href='#'+plans[selectedPlan].anchor;text(go,'查看 '+selectedPlan.toUpperCase()+' 的动作 ↓');
+      var hint=document.getElementById('cycleSelectedStatus');
+      text(hint,entry&&!editing?selectedDay+' 已完成 '+entry.plan.toUpperCase()+'。下一次练 '+state.next.toUpperCase()+'：训练当天选择当天日期，再点记录；也可补记过去的训练。':editing?'正在更正 '+selectedDay+' 的记录。保存后会更新日历；重量记录不会改变。':future?'这是未来日期，不能预记为完成。请在实际训练结束后记录；可以先标记忙碌日。':isBusy?'这天已标记忙碌。取消忙碌标记后才能记录训练。':selectedDay?'将记录 '+selectedDay+' 的 '+selectedPlan.toUpperCase()+' 训练。只记录实际完成的训练。':'请选择这次训练实际完成的日期，再记录 '+selectedPlan.toUpperCase()+'。');
+      complete.disabled=locked||!validDate(selectedDay)||future||(isBusy&&!entry);
+      text(complete,entry&&!editing?'为 '+state.next.toUpperCase()+' 选择训练日期':editing?'保存更正为 '+selectedPlan.toUpperCase():future?'未来日期不能记为完成':!selectedDay?'选择日期后记录 '+selectedPlan.toUpperCase():isBusy?'先取消这天的忙碌标记':'记录 '+selectedDay.slice(5)+' 的 '+selectedPlan.toUpperCase()+' 已完成');
+      edit.hidden=!entry||editing;edit.disabled=locked;remove.hidden=!entry||!editing;remove.disabled=locked;cancel.hidden=!editing;cancel.disabled=locked;
+      busy.disabled=locked||!validDate(selectedDay);text(busy,isBusy?'取消这天的忙碌标记':'标记这天忙碌');
+      ['cyclePrevWeek','cycleNextWeek','cycleToday'].forEach(function(id){document.getElementById(id).disabled=locked;});
+      restore.hidden=!lastState;restore.disabled=locked||!lastState;
+      var count=state.sessions.filter(function(s){return s.date>=monday(today)&&s.date<=today;}).length;
+      text(document.getElementById('cycleWeek'),'本周已完成 '+count+' 次；每周2次或3次都可以，下一周继续循环。');
+      text(document.getElementById('cycleBusyList'),state.busy.length?'忙碌日：'+state.busy.slice().sort().slice(-30).join('、'):'暂无忙碌日记录。');
       var list=document.getElementById('cycleLog');list.replaceChildren();
-      state.sessions.slice().sort(function(a,b){return b.date.localeCompare(a.date);}).slice(0,12).forEach(function(s){var li=document.createElement('li');li.textContent=s.date+' · '+s.plan.toUpperCase()+' · '+plans[s.plan].name;list.appendChild(li);});
+      ordered().reverse().slice(0,12).forEach(function(s){var li=document.createElement('li'),button=document.createElement('button');li.textContent=s.date+' · '+s.plan.toUpperCase()+' · '+plans[s.plan].name;button.type='button';button.textContent='更正';button.dataset.date=s.date;button.disabled=locked;button.addEventListener('click',function(){beginEdit(this.dataset.date);});li.appendChild(button);list.appendChild(li);});
       if(!state.sessions.length){var li=document.createElement('li');li.textContent='尚未记录训练。';list.appendChild(li);}
-      status.textContent=locked?'循环记录无法读取，已保留原数据；可以继续手动查看A/B/C，重量与计时不受影响。':session?'今天已记录训练；下次接着 '+plan.toUpperCase()+'，请留足恢复时间。':busy?'今天已标记忙碌，循环不会推进；取消标记后可记录今天训练。':'按自己的时间安排；完成本次才推进循环，机器打卡不会自动推进。';
+      text(status,locked?'循环记录无法读取，已保留原数据；可继续查看A/B/C，重量与计时不受影响。':'日历和记录按实际训练日期保存；补记不会覆盖已有日期。器械打卡不自动推进循环。');calendar();
     }
-    select.addEventListener('change',function(){if(locked)return;state.next=select.value;save();render();});
+    document.querySelectorAll('#cycleTrack button').forEach(function(button){button.addEventListener('click',function(){if(locked)return;selectedPlan=this.dataset.plan;render();});});
+    select.addEventListener('change',function(){if(!locked){selectedPlan=select.value;render();}});
+    function dateChanged(){if(dateInput.value!==selectedDay)chooseDay(dateInput.value);}
+    // Input updates before a date field loses focus. The change handler is a
+    // no-op for the same value, preserving the touched target in WebKit.
+    dateInput.addEventListener('input',dateChanged);dateInput.addEventListener('change',dateChanged);
     complete.addEventListener('click',function(){
-      if(locked||currentSession()||state.busy.indexOf(localDay())!==-1)return;
-      state.sessions.push({date:localDay(),plan:state.next,at:new Date().toISOString()});
-      state.next={a:'b',b:'c',c:'a'}[state.next];save();render();
+      if(locked)return;var entry=session(selectedDay);
+      if(entry&&!editing){chooseAnotherDay();return;}
+      if(!validDate(selectedDay)||selectedDay>localDay()||state.busy.indexOf(selectedDay)!==-1)return;
+      remember();var recordedDate=selectedDay,recordedPlan=selectedPlan;
+      if(entry){entry.plan=selectedPlan;}else state.sessions.push({date:selectedDay,plan:selectedPlan,at:new Date().toISOString()});
+      recalculate(recordedPlan);save();editing=false;selectedPlan=state.next;render();text(status,'已记录 '+recordedDate+' 的 '+recordedPlan.toUpperCase()+'；下一次 '+state.next.toUpperCase()+'。');
     });
-    undo.addEventListener('click',function(){
-      var session=currentSession();if(locked||!session)return;
-      state.next=session.plan;state.sessions=state.sessions.filter(function(s){return s.date!==localDay();});save();render();
+    edit.addEventListener('click',function(){beginEdit(selectedDay);});
+    cancel.addEventListener('click',function(){editing=false;selectedPlan=state.next;render();});
+    remove.addEventListener('click',function(){var entry=session(selectedDay);if(locked||!editing||!entry)return;remember();var previousPlan=entry.plan;state.sessions=state.sessions.filter(function(s){return s.date!==selectedDay;});recalculate(previousPlan);save();editing=false;selectedPlan=state.next;render();text(status,'已删除该日期的循环记录，可点“撤销上一步操作”恢复；重量历史未改变。');});
+    restore.addEventListener('click',function(){if(locked||!lastState)return;state=JSON.parse(lastState);lastState=null;save();selectedPlan=state.next;editing=false;render();text(status,'已恢复上一步操作前的记录。');});
+    busy.addEventListener('click',function(){
+      if(locked||!validDate(selectedDay))return;if(session(selectedDay)){text(status,'这天已记录训练，请用“更正这天的记录”，不会被忙碌标记覆盖。');return;}
+      remember();if(state.busy.indexOf(selectedDay)!==-1)state.busy=state.busy.filter(function(d){return d!==selectedDay;});else state.busy.push(selectedDay);save();render();
     });
-    // WebKit commits date changes on blur. Update during input and avoid
-    // replacing the touched button text again between touchstart and click.
-    busyDate.addEventListener('input',busyLabel);
-    busyDate.addEventListener('change',busyLabel);
-    busyToggle.addEventListener('click',function(){
-      if(locked)return;
-      var date=busyDate.value;if(!validDate(date)){status.textContent='请先选择有效的忙碌日期。';return;}
-      if(state.sessions.some(function(s){return s.date===date;})){status.textContent='这天已记录训练；如需修改，请先撤销当天的训练记录。';return;}
-      if(state.busy.indexOf(date)!==-1)state.busy=state.busy.filter(function(d){return d!==date;});else state.busy.push(date);
-      save();render();
-    });
-    window.addEventListener('focus',render);
-    document.addEventListener('visibilitychange',function(){if(!document.hidden)render();});
-    window.setInterval(render,30000);render();
+    document.getElementById('cyclePrevWeek').addEventListener('click',function(){week=offset(week,-7);calendar();});
+    document.getElementById('cycleNextWeek').addEventListener('click',function(){week=offset(week,7);calendar();});
+    document.getElementById('cycleToday').addEventListener('click',function(){chooseDay(localDay());});
+    function rollover(){var today=localDay();if(today!==shownDay){if(selectedDay===shownDay){selectedDay=today;week=monday(today);editing=false;selectedPlan=state.next;}shownDay=today;render();}}
+    window.addEventListener('focus',rollover);document.addEventListener('visibilitychange',function(){if(!document.hidden)rollover();});window.setInterval(rollover,30000);render();
   }
 
   // Keep native <details> working independently of script and storage.
