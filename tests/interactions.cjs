@@ -47,7 +47,7 @@ async function main() {
   await test('the ten remaining workout cards open their correct manufacturer videos', async (p,c) => {
     await c.route('https://**/*', r=>r.fulfill({contentType:'text/html',body:'<title>Video target verified</title>'}));
     await open(p);assert.equal(await p.locator('details.machine a.video-link').count(),15);
-    const cases=[['mon-pulldown','NAIEnMjN-6w'],['fri-pulldown','NAIEnMjN-6w'],['mon-abs','yUHmHlVdVqM'],['wed-abs','yUHmHlVdVqM'],['wed-legpress','yyla8aCTMWo'],['fri-legpress','yyla8aCTMWo'],['wed-glute','7nazTC6EshM'],['fri-glute','7nazTC6EshM'],['wed-legcurl','SiwJ_T62l9c'],['wed-abductor','H98IP8rARy4']];
+    const cases=[['mon-pulldown','NAIEnMjN-6w'],['fri-pulldown','NAIEnMjN-6w'],['mon-abs','yUHmHlVdVqM'],['wed-abs','yUHmHlVdVqM'],['wed-legpress','yyla8aCTMWo'],['fri-abductor','H98IP8rARy4'],['wed-glute','7nazTC6EshM'],['fri-glute','7nazTC6EshM'],['wed-legcurl','SiwJ_T62l9c'],['wed-abductor','H98IP8rARy4']];
     for(const [id,videoId] of cases){const [tab]=await Promise.all([p.waitForEvent('popup'),p.locator('#'+id+' a.video-link').tap()]);await tab.waitForLoadState('domcontentloaded');assert.equal(tab.url(),'https://www.youtube.com/watch?v='+videoId);await tab.close();}
   });
   await test('photos and native enlargement remain available in script-disabled offline files', async p => {
