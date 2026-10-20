@@ -32,6 +32,58 @@ async function main() {
   });
   await new Promise(r => server.listen(0, '127.0.0.1', r)); origin = `http://127.0.0.1:${server.address().port}`;
   browser = await (engine === 'webkit' ? webkit.launch() : chromium.launch());
+  await test('flexible cycle advances once per day, persists and supports undo', async p => {
+    await frozen(p,'2026-10-21T12:00:00+09:00');
+    assert.equal(await p.locator('#cycleNext').inputValue(),'a');
+    await p.locator('#cycleComplete').tap();assert.equal(await p.locator('#cycleNext').inputValue(),'b');
+    assert.equal(await p.locator('#cycleComplete').isDisabled(),true);
+    await p.reload();assert.equal(await p.locator('#cycleNext').inputValue(),'b');
+    await p.locator('.cycle-history summary').first().tap();assert.match(await text(p,'#cycleLog'),/2026-10-21.*A/);
+    await p.locator('#cycleUndo').tap();assert.equal(await p.locator('#cycleNext').inputValue(),'a');
+    assert.equal(await p.locator('#cycleComplete').isEnabled(),true);
+  });
+  await test('flexible busy dates do not advance the cycle or overwrite training days', async p => {
+    await frozen(p,'2026-10-21T12:00:00+09:00');
+    await p.locator('#busyDate').fill('2026-10-21');await p.locator('#busyToggle').tap();
+    assert.equal(await p.locator('#cycleComplete').isDisabled(),true);assert.equal(await p.locator('#cycleNext').inputValue(),'a');
+    await p.locator('#busyDate').fill('2026-10-22');await p.locator('#busyToggle').tap();
+    await p.reload();await p.locator('.cycle-history summary').first().tap();
+    assert.match(await p.locator('#cycleBusyList').textContent(),/2026-10-21.*2026-10-22/);
+    assert.equal(await p.locator('.cycle-history').first().evaluate(el=>el.open),true);
+    await p.locator('#busyDate').fill('2026-10-21');await p.locator('#busyToggle').tap();await p.locator('#cycleComplete').tap();
+    await p.locator('#busyToggle').tap();assert.match(await text(p,'#cycleStatus'),/已记录训练/);
+    assert.equal(await p.locator('#cycleNext').inputValue(),'b');
+  });
+  await test('flexible two-session weeks continue across week boundaries without resetting', async p => {
+    await frozen(p,'2026-10-21T12:00:00+09:00');await p.locator('#cycleComplete').tap();
+    await p.clock.setSystemTime(new Date('2026-10-23T12:00:00+09:00'));await p.evaluate(()=>window.dispatchEvent(new Event('focus')));await p.locator('#cycleComplete').tap();
+    assert.match(await text(p,'#cycleWeek'),/2 次/);assert.equal(await p.locator('#cycleNext').inputValue(),'c');
+    await p.clock.setSystemTime(new Date('2026-10-28T12:00:00+09:00'));await p.evaluate(()=>window.dispatchEvent(new Event('focus')));
+    assert.match(await text(p,'#cycleWeek'),/0 次/);assert.equal(await p.locator('#cycleNext').inputValue(),'c');
+    assert.equal(await p.locator('#busyDate').inputValue(),'2026-10-28');
+    await p.locator('#cycleComplete').tap();assert.equal(await p.locator('#cycleNext').inputValue(),'a');
+    assert.equal(await p.locator('#cycleLog li').count(),3);
+  });
+  await test('flexible new check-ins retain legacy weights and use separate daily posture keys', async (p,c) => {
+    await c.addInitScript(()=>{if(!localStorage.getItem('test-seeded')){localStorage.setItem('gym-compatible.load.row','17.5');localStorage.setItem('gym-compatible.done.2026-10-21.mon-row','yes');localStorage.setItem('test-seeded','yes');}});
+    await frozen(p,'2026-10-21T12:00:00+09:00');assert.equal(await p.locator('#mon-row input.load').inputValue(),'17.5');assert.equal(await p.locator('#mon-row input.done').isChecked(),true);
+    const posture=p.locator('input.done[data-key="posture-daily"]');await posture.check();await p.reload();assert.equal(await posture.isChecked(),true);
+    await p.clock.setSystemTime(new Date('2026-10-22T12:00:00+09:00'));await p.evaluate(()=>window.dispatchEvent(new Event('focus')));assert.equal(await posture.isChecked(),false);assert.equal(await p.locator('#mon-row input.load').inputValue(),'17.5');
+  });
+  await test('flexible corrupt schedule cannot overwrite saved data or break other features', async (p,c) => {
+    await c.addInitScript(()=>localStorage.setItem('gym-compatible.rotation.v1','{broken'));
+    await open(p);assert.match(await text(p,'#cycleStatus'),/无法读取/);assert.equal(await p.locator('#cycleComplete').isDisabled(),true);
+    await p.locator('#play').tap();assert.match(await text(p,'#play'),/暂停/);assert.equal(await p.evaluate(()=>localStorage.getItem('gym-compatible.rotation.v1')),'{broken');
+  });
+  await test('flexible all routines and posture steps are readable with no JavaScript', async p => {
+    await open(p);assert.equal(await p.locator('.machine-details:visible').count(),15);
+    for(const id of ['pelvic-tilt','dead-bug','wall-slide'])assert.equal(await p.locator('#'+id+' ol').isVisible(),true);
+    assert.match(await text(p,'#posture'),/5–8分钟[\s\S]*每侧6–8次[\s\S]*1–2次/);
+    assert.equal(await p.locator('#postureVideo').getAttribute('href'),'https://www.bilibili.com/video/BV1Qb4y1q7bU/');
+    assert.equal(await p.locator('#cycleComplete').isDisabled(),true);
+    assert.doesNotMatch(await text(p,'body'),/周一｜|周三｜|周五｜/);
+    await p.locator('#mon-pulldown summary.machine-summary').tap();await p.locator('#mon-pulldown summary.machine-summary').tap();assert.equal(await p.locator('#mon-pulldown .machine-details').isVisible(),true);
+  },{javaScriptEnabled:false});
   await test('all 15 cards show real embedded photos and native photo enlargement works', async p => {
     await open(p); assert.equal(await p.locator('.machine-picture img').count(),15);
     const images = await p.locator('.machine-picture img').evaluateAll(imgs => imgs.map(i=>({src:i.src,loaded:i.complete&&i.naturalWidth>=600,alt:i.alt})));

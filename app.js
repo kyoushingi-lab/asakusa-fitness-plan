@@ -205,6 +205,83 @@
     window.setInterval(function(){if(!document.hidden)sync();},30000);
   }
 
+    function initFlexibleSchedule(read, write, localDay) {
+    var select=document.getElementById('cycleNext');
+    if(!select)return;
+    var complete=document.getElementById('cycleComplete'),undo=document.getElementById('cycleUndo');
+    var busyDate=document.getElementById('busyDate'),busyToggle=document.getElementById('busyToggle');
+    var status=document.getElementById('cycleStatus'),key='gym-compatible.rotation.v1';
+    var plans={a:{name:'背＋手臂＋腹',anchor:'mon'},b:{name:'臀腿＋腹',anchor:'wed'},c:{name:'背＋臀综合',anchor:'fri'}};
+    var state={version:1,next:'a',sessions:[],busy:[]},locked=false,shownDay=localDay();
+    function validDate(date) {
+      if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date))return false;
+      var parsed=new Date(date+'T00:00:00Z');
+      return !isNaN(parsed)&&parsed.toISOString().slice(0,10)===date;
+    }
+    try {
+      var raw=read(key);
+      if(raw){
+        var saved=JSON.parse(raw);
+        if(!saved||saved.version!==1||!Object.prototype.hasOwnProperty.call(plans,saved.next)||!Array.isArray(saved.sessions)||!Array.isArray(saved.busy)||saved.sessions.length>10000||saved.busy.length>10000)throw new Error('Invalid schedule');
+        if(!saved.sessions.every(function(s){return s&&validDate(s.date)&&Object.prototype.hasOwnProperty.call(plans,s.plan)&&typeof s.at==='string'&&!isNaN(Date.parse(s.at));})||!saved.busy.every(validDate))throw new Error('Invalid entries');
+        if(new Set(saved.sessions.map(function(s){return s.date;})).size!==saved.sessions.length)throw new Error('Repeated day');
+        state={version:1,next:saved.next,sessions:saved.sessions.map(function(s){return{date:s.date,plan:s.plan,at:s.at};}),busy:Array.from(new Set(saved.busy))};
+      }
+    }catch(error){locked=true;}
+    function save(){if(!locked)write(key,JSON.stringify(state));}
+    function currentSession(){return state.sessions.find(function(s){return s.date===localDay();});}
+    function busyLabel(){
+      var label=state.busy.indexOf(busyDate.value)!==-1?'取消这天的忙碌标记':'标记这天忙碌';
+      if(busyToggle.textContent!==label)busyToggle.textContent=label;
+    }
+    function render() {
+      var today=localDay(),session=currentSession(),busy=state.busy.indexOf(today)!==-1,plan=state.next;
+      if(shownDay!==today&&busyDate.value===shownDay)busyDate.value=today;
+      shownDay=today;
+      select.value=plan;select.disabled=locked;
+      document.getElementById('cycleRecommendation').textContent='下一次：'+plan.toUpperCase()+' · '+plans[plan].name;
+      var go=document.getElementById('cycleGo');go.href='#'+plans[plan].anchor;go.textContent='查看 '+plan.toUpperCase()+' 的动作 ↓';
+      complete.disabled=locked||!!session||busy;complete.textContent=session?'今天已记录 '+session.plan.toUpperCase()+' 训练':'记录今天完成 '+plan.toUpperCase();
+      undo.hidden=!session;undo.disabled=locked||!session;
+      busyDate.disabled=locked;busyToggle.disabled=locked;
+      if(!busyDate.value)busyDate.value=today;
+      busyLabel();
+      var start=new Date(today+'T12:00:00');start.setDate(start.getDate()-(start.getDay()+6)%7);
+      var monday=start.getFullYear()+'-'+('0'+(start.getMonth()+1)).slice(-2)+'-'+('0'+start.getDate()).slice(-2);
+      var count=state.sessions.filter(function(s){return s.date>=monday&&s.date<=today;}).length;
+      document.getElementById('cycleWeek').textContent='本周已完成 '+count+' 次；每周2次或3次都可以，下一周继续循环。';
+      document.getElementById('cycleBusyList').textContent=state.busy.length?'忙碌日：'+state.busy.slice().sort().slice(-30).join('、'):'暂无忙碌日记录。';
+      var list=document.getElementById('cycleLog');list.replaceChildren();
+      state.sessions.slice().sort(function(a,b){return b.date.localeCompare(a.date);}).slice(0,12).forEach(function(s){var li=document.createElement('li');li.textContent=s.date+' · '+s.plan.toUpperCase()+' · '+plans[s.plan].name;list.appendChild(li);});
+      if(!state.sessions.length){var li=document.createElement('li');li.textContent='尚未记录训练。';list.appendChild(li);}
+      status.textContent=locked?'循环记录无法读取，已保留原数据；可以继续手动查看A/B/C，重量与计时不受影响。':session?'今天已记录训练；下次接着 '+plan.toUpperCase()+'，请留足恢复时间。':busy?'今天已标记忙碌，循环不会推进；取消标记后可记录今天训练。':'按自己的时间安排；完成本次才推进循环，机器打卡不会自动推进。';
+    }
+    select.addEventListener('change',function(){if(locked)return;state.next=select.value;save();render();});
+    complete.addEventListener('click',function(){
+      if(locked||currentSession()||state.busy.indexOf(localDay())!==-1)return;
+      state.sessions.push({date:localDay(),plan:state.next,at:new Date().toISOString()});
+      state.next={a:'b',b:'c',c:'a'}[state.next];save();render();
+    });
+    undo.addEventListener('click',function(){
+      var session=currentSession();if(locked||!session)return;
+      state.next=session.plan;state.sessions=state.sessions.filter(function(s){return s.date!==localDay();});save();render();
+    });
+    // WebKit commits date changes on blur. Update during input and avoid
+    // replacing the touched button text again between touchstart and click.
+    busyDate.addEventListener('input',busyLabel);
+    busyDate.addEventListener('change',busyLabel);
+    busyToggle.addEventListener('click',function(){
+      if(locked)return;
+      var date=busyDate.value;if(!validDate(date)){status.textContent='请先选择有效的忙碌日期。';return;}
+      if(state.sessions.some(function(s){return s.date===date;})){status.textContent='这天已记录训练；如需修改，请先撤销当天的训练记录。';return;}
+      if(state.busy.indexOf(date)!==-1)state.busy=state.busy.filter(function(d){return d!==date;});else state.busy.push(date);
+      save();render();
+    });
+    window.addEventListener('focus',render);
+    document.addEventListener('visibilitychange',function(){if(!document.hidden)render();});
+    window.setInterval(render,30000);render();
+  }
+
   // Keep native <details> working independently of script and storage.
   var status = document.getElementById('storageStatus');
   var memory = Object.create(null);
@@ -277,6 +354,8 @@
   try { window.localStorage.setItem('__gym_test', '1'); window.localStorage.removeItem('__gym_test'); }
   catch (error) { volatile = true; }
   storageMessage();
+
+  initFlexibleSchedule(read, write, localDay);
 
   var segments = [
     { name: '热身', grade: 3, speed: 4, seconds: 360 },
