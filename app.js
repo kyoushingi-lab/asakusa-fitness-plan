@@ -25,7 +25,7 @@
       // Render the recent 100 entries; exports always include the complete history.
       shown.slice(0,100).forEach(function(entry){
         var row = document.createElement('tr');
-        [entry.date+' '+entry.time,names[entry.exercise],entry.kg+' kg'].forEach(function(value){var cell=document.createElement('td');cell.textContent=value;row.appendChild(cell);});
+        [entry.date+' '+(entry.id.indexOf('date-only:')===0?'时间未记录':entry.time),names[entry.exercise],entry.kg+' kg'].forEach(function(value){var cell=document.createElement('td');cell.textContent=value;row.appendChild(cell);});
         rows.appendChild(row);
       });
       document.getElementById('historyEmpty').hidden=shown.length>0;
@@ -34,7 +34,9 @@
         var field=loads[i], key=field.getAttribute('data-key');
         var latest=entries.filter(function(e){return e.exercise===key;}).sort(function(a,b){return Date.parse(b.at)-Date.parse(a.at);})[0];
         var hint=field.closest('.finish-row').querySelector('.weight-saved');
-        hint.textContent=latest ? '最近记录：'+latest.date+' '+latest.time+' · '+latest.kg+' kg' : '填写后自动保存日期和重量';
+        document.querySelectorAll('[data-last-weight="'+key+'"]').forEach(function(el){el.textContent=latest?latest.kg+' kg':'待记录';});
+        document.querySelectorAll('[data-last-date="'+key+'"]').forEach(function(el){el.textContent=latest?latest.date:'待记录';});
+        hint.textContent=latest ? '最近记录：'+latest.date+' '+(latest.id.indexOf('date-only:')===0?'时间未记录':latest.time)+' · '+latest.kg+' kg' : '填写后自动保存日期和重量';
       }
     }
     Object.keys(names).forEach(function(key){var option=document.createElement('option');option.value=key;option.textContent=names[key];filter.appendChild(option);});
@@ -86,7 +88,7 @@
       download(JSON.stringify({app:'asakusa-fitness',version:1,exportedAt:new Date().toISOString(),entries:entries,latest:latest,unreadableHistory:locked?raw:null},null,2),'application/json;charset=utf-8','.json');
     });
     var csvButton=document.getElementById('exportCsv');csvButton.disabled=false;
-    csvButton.addEventListener('click',function(){flush();var lines=['日期,时间,器械,重量(kg)'];entries.slice().sort(function(a,b){return Date.parse(b.at)-Date.parse(a.at);}).forEach(function(e){lines.push([e.date,e.time,names[e.exercise],e.kg].join(','));});download('\ufeff'+lines.join('\r\n'),'text/csv;charset=utf-8','.csv');});
+    csvButton.addEventListener('click',function(){flush();var lines=['日期,时间,器械,重量(kg)'];entries.slice().sort(function(a,b){return Date.parse(b.at)-Date.parse(a.at);}).forEach(function(e){lines.push([e.date,e.id.indexOf('date-only:')===0?'':e.time,names[e.exercise],e.kg].join(','));});download('\ufeff'+lines.join('\r\n'),'text/csv;charset=utf-8','.csv');});
     var importer=document.getElementById('importHistory');importer.disabled=false;
     importer.addEventListener('change',function(){
       var file=this.files[0];if(!file)return;
@@ -118,16 +120,45 @@
       flush:flush,
       getEntries:function(){return entries.map(function(e){return Object.assign({},e);});},
       subscribe:function(fn){listeners.push(fn);},
-      merge:function(incoming){
+      merge:function(incoming,imported){
         if(locked)throw new Error('本机历史无法读取，请先导出备份并恢复。');
         if(!Array.isArray(incoming)||!incoming.every(valid))throw new Error('云端记录格式无效。');
         var before={};Object.keys(names).forEach(function(key){var last=entries.filter(function(e){return e.exercise===key;}).sort(function(a,b){return Date.parse(b.at)-Date.parse(a.at);})[0];before[key]=last&&last.id;});
         var ids=new Set(entries.map(function(e){return e.id;}));
         incoming.forEach(function(e){if(!ids.has(e.id)){entries.push({id:e.id,exercise:e.exercise,kg:e.kg,date:e.date,time:e.time,at:e.at});ids.add(e.id);}});
         var changed=Object.keys(names).filter(function(key){var last=entries.filter(function(e){return e.exercise===key;}).sort(function(a,b){return Date.parse(b.at)-Date.parse(a.at);})[0];return last&&last.id!==before[key];});
-        write(historyKey,JSON.stringify(entries));refreshWeights(changed);render();
+        write(historyKey,JSON.stringify(entries));refreshWeights(changed);render();if(imported)notify();
       }
     };
+  }
+
+  function initPersonalImport(history,schedule,read,write,localDay){
+    var input=document.getElementById('importWorkout'),apply=document.getElementById('applyWorkoutImport'),preview=document.getElementById('workoutImportPreview'),status=document.getElementById('workoutImportStatus'),bundle=null;
+    if(!input||!schedule)return;
+    var names={pulldown:'高位下拉',row:'坐姿划船',chest:'胸推',triceps:'三头肌',abs:'腹肌机',glute:'臀部训练机',legpress:'腿举',legcurl:'卧姿腿弯举',abductor:'髋外展'};
+    function dateOK(s){if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;var d=new Date(s+'T00:00:00Z');return !isNaN(d)&&d.toISOString().slice(0,10)===s&&s<=localDay();}
+    function known(s){return Object.prototype.hasOwnProperty.call(names,s);}
+    input.disabled=false;
+    input.addEventListener('change',function(){
+      bundle=null;apply.hidden=true;preview.textContent='';var file=input.files[0];if(!file)return;
+      if(file.size>5000000){status.textContent='文件过大，请选择5 MB以内的档案。';return;}
+      var reader=new FileReader();reader.onload=function(){try{
+        var data=JSON.parse(reader.result);
+        if(data.app!=='asakusa-personal-profile'||data.version!==1||!Array.isArray(data.entries)||data.entries.length>10000||!Array.isArray(data.sessions)||data.sessions.length>10000)throw Error('Invalid file');
+        if(!data.entries.every(function(e){return e&&known(e.exercise)&&typeof e.id==='string'&&e.id.length>0&&e.id.length<=120&&typeof e.kg==='number'&&Number.isFinite(e.kg)&&e.kg>=0&&e.kg<=9999&&dateOK(e.date)&&typeof e.at==='string'&&!isNaN(Date.parse(e.at))&&typeof e.time==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(e.time);}))throw Error('Invalid weights');
+        if(!data.sessions.every(function(s){return s&&dateOK(s.date)&&/^[abc]$/.test(s.plan)&&Array.isArray(s.completed)&&s.completed.every(known)&&s.skipped&&typeof s.skipped==='object'&&!Array.isArray(s.skipped)&&Object.keys(s.skipped).every(function(k){return known(k)&&typeof s.skipped[k]==='string'&&s.skipped[k].length<=200&&s.completed.indexOf(k)===-1;});})||new Set(data.sessions.map(function(s){return s.date;})).size!==data.sessions.length)throw Error('Invalid sessions');
+        if(!schedule.canImport())throw Error('Schedule unreadable');
+        bundle=data;preview.textContent=data.sessions.map(function(s){return s.date+' · '+s.plan.toUpperCase()+' · 完成'+s.completed.length+'项'+(Object.keys(s.skipped).length?'（含跳过动作说明）':'');}).join('；')+'。重量记录 '+data.entries.length+' 条。同日期训练将以档案为准，其余记录保留。';apply.hidden=false;apply.disabled=false;status.textContent='档案已读取，确认后导入。';
+      }catch(e){status.textContent='无法导入：档案无效或本机日历不可读；原有记录未改变。';}};
+      reader.onerror=function(){status.textContent='文件无法读取，请重试。';};reader.readAsText(file);
+    });
+    apply.addEventListener('click',function(){if(!bundle)return;try{
+      // Validate everything before the first mutation. History remains append-only.
+      if(!schedule.canImport())throw Error('Schedule unreadable');
+      history.merge(bundle.entries,true);schedule.importSessions(bundle.sessions);
+      bundle.sessions.forEach(function(s){var prefix={a:'mon',b:'wed',c:'fri'}[s.plan];s.completed.forEach(function(k){write('gym-compatible.done.'+s.date+'.'+prefix+'-'+k,'yes');});Object.keys(s.skipped).forEach(function(k){write('gym-compatible.done.'+s.date+'.'+prefix+'-'+k,'no');});});
+      window.dispatchEvent(new Event('gym-checkins-imported'));status.textContent=document.getElementById('syncStatus')?'已导入训练日期与重量。重量沿用账号同步；训练完成情况保存在本机。':'已导入训练日期与重量，保存在当前浏览器。';apply.hidden=true;bundle=null;input.value='';
+    }catch(e){status.textContent='导入未完成：请先导出本机备份，检查历史数据后重试。';}});
   }
 
     function initCloudSync(history,read,write){
@@ -226,7 +257,7 @@
         if(!saved||saved.version!==1||!Object.prototype.hasOwnProperty.call(plans,saved.next)||!Array.isArray(saved.sessions)||!Array.isArray(saved.busy)||saved.sessions.length>10000||saved.busy.length>10000)throw new Error('Invalid schedule');
         if(!saved.sessions.every(function(s){return s&&validDate(s.date)&&Object.prototype.hasOwnProperty.call(plans,s.plan)&&typeof s.at==='string'&&!isNaN(Date.parse(s.at));})||!saved.busy.every(validDate))throw new Error('Invalid entries');
         if(new Set(saved.sessions.map(function(s){return s.date;})).size!==saved.sessions.length)throw new Error('Repeated day');
-        state={version:1,next:saved.next,sessions:saved.sessions.map(function(s){return{date:s.date,plan:s.plan,at:s.at};}),busy:Array.from(new Set(saved.busy))};
+        state={version:1,next:saved.next,sessions:saved.sessions.map(function(s){return{date:s.date,plan:s.plan,at:s.at,completed:Array.isArray(s.completed)?s.completed:[],skipped:s.skipped&&typeof s.skipped==='object'?s.skipped:{}};}),busy:Array.from(new Set(saved.busy))};
       }
     }catch(error){locked=true;}
     selectedPlan=state.next;var week=monday(selectedDay);
@@ -255,6 +286,7 @@
       var today=localDay(),entry=session(selectedDay),isBusy=state.busy.indexOf(selectedDay)!==-1,future=validDate(selectedDay)&&selectedDay>today;
       dateInput.value=selectedDay;dateInput.disabled=locked;select.value=selectedPlan;select.disabled=locked;
       text(document.getElementById('cycleRecommendation'),'下一次：'+state.next.toUpperCase()+' · '+plans[state.next].name);
+      text(document.getElementById('cycleCompactNext'),'下一次：'+state.next.toUpperCase()+' · '+plans[state.next].name);
       document.querySelectorAll('#cycleTrack button').forEach(function(button){var p=button.dataset.plan;button.disabled=locked;button.className=(p===state.next?'is-next ':'')+(p===selectedPlan?'is-selected':'');button.setAttribute('aria-pressed',String(p===selectedPlan));var last=ordered().filter(function(s){return s.plan===p;}).pop();text(button.querySelector('.cycle-plan-state'),p===state.next?'下一次':last?'最近 '+last.date.slice(5):'尚未记录');});
       var go=document.getElementById('cycleGo');go.href='#'+plans[selectedPlan].anchor;text(go,'查看 '+selectedPlan.toUpperCase()+' 的动作 ↓');
       var hint=document.getElementById('cycleSelectedStatus');
@@ -269,7 +301,7 @@
       text(document.getElementById('cycleWeek'),'本周已完成 '+count+' 次；每周2次或3次都可以，下一周继续循环。');
       text(document.getElementById('cycleBusyList'),state.busy.length?'忙碌日：'+state.busy.slice().sort().slice(-30).join('、'):'暂无忙碌日记录。');
       var list=document.getElementById('cycleLog');list.replaceChildren();
-      ordered().reverse().slice(0,12).forEach(function(s){var li=document.createElement('li'),button=document.createElement('button');li.textContent=s.date+' · '+s.plan.toUpperCase()+' · '+plans[s.plan].name;button.type='button';button.textContent='更正';button.dataset.date=s.date;button.disabled=locked;button.addEventListener('click',function(){beginEdit(this.dataset.date);});li.appendChild(button);list.appendChild(li);});
+      ordered().reverse().slice(0,12).forEach(function(s){var li=document.createElement('li'),button=document.createElement('button');li.textContent=s.date+' · '+s.plan.toUpperCase()+' · '+plans[s.plan].name;var skipped=s.skipped||{},labels={pulldown:'高位下拉',row:'划船',chest:'胸推',triceps:'三头肌',abs:'腹肌机',glute:'臀部机',legpress:'腿举',legcurl:'腿弯举',abductor:'髋外展'};if(Array.isArray(s.completed)&&s.completed.length)li.textContent+=' · '+s.completed.length+'项完成';Object.keys(skipped).forEach(function(k){li.textContent+=' · '+(labels[k]||k)+'跳过：'+String(skipped[k]).slice(0,200);});button.type='button';button.textContent='更正';button.dataset.date=s.date;button.disabled=locked;button.addEventListener('click',function(){beginEdit(this.dataset.date);});li.appendChild(button);list.appendChild(li);});
       if(!state.sessions.length){var li=document.createElement('li');li.textContent='尚未记录训练。';list.appendChild(li);}
       text(status,locked?'循环记录无法读取，已保留原数据；可继续查看A/B/C，重量与计时不受影响。':'日历和记录按实际训练日期保存；补记不会覆盖已有日期。器械打卡不自动推进循环。');calendar();
     }
@@ -300,6 +332,7 @@
     document.getElementById('cycleToday').addEventListener('click',function(){chooseDay(localDay());});
     function rollover(){var today=localDay();if(today!==shownDay){if(selectedDay===shownDay){selectedDay=today;week=monday(today);editing=false;selectedPlan=state.next;}shownDay=today;render();}}
     window.addEventListener('focus',rollover);document.addEventListener('visibilitychange',function(){if(!document.hidden)rollover();});window.setInterval(rollover,30000);render();
+    return {canImport:function(){return !locked;},importSessions:function(incoming){if(locked)throw Error('Schedule unreadable');remember();incoming.forEach(function(s){state.sessions=state.sessions.filter(function(old){return old.date!==s.date;});state.sessions.push({date:s.date,plan:s.plan,at:s.date+'T00:00:00.000Z',completed:s.completed.slice(),skipped:Object.assign({},s.skipped)});state.busy=state.busy.filter(function(d){return d!==s.date;});});recalculate(state.next);save();selectedPlan=state.next;editing=false;render();}};
   }
 
   // Keep native <details> working independently of script and storage.
@@ -375,8 +408,11 @@
   catch (error) { volatile = true; }
   storageMessage();
 
-  initFlexibleSchedule(read, write, localDay);
+  var scheduleApi=initFlexibleSchedule(read, write, localDay);
+  initPersonalImport(historyApi,scheduleApi,read,write,localDay);
+  window.addEventListener('gym-checkins-imported',updateDay);
 
+  // TIMER_ADJUSTMENT_V2_START
   var segments = [
     { name: '热身', grade: 3, speed: 4, seconds: 360 },
     { name: '上坡①', grade: 7, speed: 5, seconds: 360 },
@@ -384,36 +420,50 @@
     { name: '上坡③', grade: 10, speed: 4.5, seconds: 240 },
     { name: '放松', grade: 0, speed: 3.5, seconds: 240 }
   ];
-  var total = 1800000;
-  var elapsed = 0;
-  var running = false;
-  var deadline = 0;
-  var interval = null;
+  var phases = [], total = 0, exerciseTotal = 1800000;
+  for (var segmentIndex = 0; segmentIndex < segments.length; segmentIndex++) {
+    if (segmentIndex > 0) {
+      phases.push({ index: segmentIndex, gap: true, start: total, end: total + 10000 });
+      total += 10000;
+    }
+    phases.push({ index: segmentIndex, gap: false, start: total, end: total + segments[segmentIndex].seconds * 1000 });
+    total += segments[segmentIndex].seconds * 1000;
+  }
+  var elapsed = 0, running = false, deadline = 0, interval = null;
   var play = document.getElementById('play');
   var next = document.getElementById('next');
   var reset = document.getElementById('reset');
   var timerLabel = document.getElementById('timerLabel');
+  var timerBox = timerLabel.closest('.timer-box');
   function format(seconds) { return ('0' + Math.floor(seconds / 60)).slice(-2) + ':' + ('0' + (seconds % 60)).slice(-2); }
   function sample() { if (running) elapsed = Math.min(total, Math.max(0, total - (deadline - Date.now()))); }
   function stage() {
-    var end = 0;
-    for (var index = 0; index < segments.length; index++) {
-      end += segments[index].seconds * 1000;
-      if (elapsed < end) return { index: index, end: end };
+    for (var index = 0; index < phases.length; index++) if (elapsed < phases[index].end) return phases[index];
+    return phases[phases.length - 1];
+  }
+  function exerciseRemaining() {
+    var done = 0;
+    for (var index = 0; index < phases.length; index++) {
+      var phase = phases[index];
+      if (!phase.gap) done += Math.max(0, Math.min(elapsed, phase.end) - phase.start);
     }
-    return { index: 4, end: total };
+    return Math.ceil((exerciseTotal - done) / 1000);
   }
   function clearTicker() { if (interval !== null) window.clearInterval(interval); interval = null; }
   function render() {
     var complete = elapsed >= total;
     if (complete) { running = false; clearTicker(); }
-    var current = stage();
-    var item = segments[current.index];
-    var label = complete ? '30分钟爬坡已完成' : '第' + (current.index + 1) + '/5段 · ' + item.name + ' · 坡度' + item.grade + ' / 速度' + item.speed + ' km/h';
+    var current = stage(), item = segments[current.index];
+    var label = complete ? '30分钟爬坡已完成' : (current.gap ? '调整参数 · 即将进入第' : '第') + (current.index + 1) + '/5段 · ' + item.name;
     if (timerLabel.textContent !== label) timerLabel.textContent = label;
+    timerBox.classList.toggle('is-adjusting', !complete && current.gap);
+    document.getElementById('timerGrade').textContent = String(item.grade);
+    document.getElementById('timerSpeed').textContent = String(item.speed);
     document.getElementById('clock').textContent = format(complete ? 0 : Math.ceil((current.end - elapsed) / 1000));
-    document.getElementById('totalClock').textContent = '总剩余 ' + format(Math.ceil((total - elapsed) / 1000)) + ' / 30:00';
+    document.getElementById('totalClock').textContent = '训练剩余 ' + format(exerciseRemaining()) + ' / 30:00 · 全程剩余 ' + format(Math.ceil((total - elapsed) / 1000)) + ' / 30:40';
+    document.getElementById('timerHint').textContent = complete ? '已完成30分钟训练；4次参数调整另计40秒。' : current.gap ? '先把跑步机调到上方参数。倒计时结束后开始下一段；调好后也可直接点下方按钮。' : '本段按上方坡度与速度训练；下一段前会留10秒调整参数。';
     play.textContent = complete ? '已完成' : running ? '❚❚ 暂停' : elapsed > 0 ? '▶ 继续' : '▶ 开始';
+    next.textContent = current.gap && !complete ? '参数已调好，开始本段' : current.index === segments.length - 1 ? '结束训练' : '下一段';
     play.disabled = complete;
     next.disabled = complete;
     reset.disabled = false;
@@ -432,9 +482,10 @@
     render();
   });
   reset.addEventListener('click', function () { clearTicker(); running = false; elapsed = 0; render(); });
+  // TIMER_ADJUSTMENT_V2_END
   document.addEventListener('visibilitychange', function () { ensureDay(); tick(); });
   window.addEventListener('pageshow', function () { ensureDay(); tick(); });
-  window.addEventListener('focus', ensureDay);
+  window.addEventListener('focus', function () { ensureDay(); tick(); });
   window.setInterval(ensureDay, 30000);
   render();
   document.getElementById('runtimeStatus').textContent = '交互已启用：点器械图片或名称可展开／收起；打卡、重量与爬坡计时可用。';

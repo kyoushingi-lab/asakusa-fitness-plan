@@ -40,3 +40,37 @@ button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible{o
 
 
 #syncLogin{display:grid;grid-template-columns:1fr;gap:9px}#syncLogin input{min-width:0;width:100%;font-size:16px;border:1px solid #c7dbcc;border-radius:9px;min-height:44px;padding:9px}#sync button{min-height:44px;border:1px solid #c7dbcc;border-radius:9px;background:#edf7ee;color:#214f3a;padding:9px 13px;font-size:14px}#syncLogin label{font-size:13px;font-weight:700}#syncStatus,#syncAccount{font-size:13px;overflow-wrap:anywhere}.sync-actions{display:flex;gap:10px}#syncLogin[hidden]{display:none}
+
+/* collapsible-calendar */
+#cyclePanel>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;list-style:none;cursor:pointer;min-height:58px;font-size:20px;font-weight:800}#cyclePanel>summary::-webkit-details-marker{display:none}#cyclePanel>summary small{display:block;color:var(--green);font-size:15px;font-weight:600;margin-top:4px}.cycle-panel-toggle:after{content:"展开 ＋";font-size:14px;color:var(--green);white-space:nowrap}#cyclePanel[open] .cycle-panel-toggle:after{content:"收起 −"}.cycle-panel-body{border-top:1px solid var(--border);padding-top:16px;margin-top:14px}.cycle-panel-body .cycle-heading{display:none}.workout-import{margin:18px 0;border-top:1px solid var(--border);padding-top:10px}.workout-import>summary{min-height:44px;align-content:center;cursor:pointer;font-weight:700;color:var(--green)}#applyWorkoutImport{min-height:44px;background:var(--green);color:white;border:0;border-radius:8px;padding:10px 14px}#applyWorkoutImport[hidden]{display:none}
+
+/* TIMER_ADJUSTMENT_V2_START */
+.timer-box{padding:20px;border:2px solid transparent}
+.timer-box #timerLabel{font-size:clamp(18px,4.8vw,24px);font-weight:700;line-height:1.5;color:#d7f2e4}
+.timer-parameters{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0 8px}
+.timer-parameters>div{background:#ffffff12;border:1px solid #ffffff24;border-radius:12px;padding:12px 14px;min-width:0}
+.timer-parameters>div>span{display:block;color:#c4dfcf;font-size:17px;font-weight:600}
+.timer-parameters strong{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;color:#fff;line-height:1.25}
+.timer-parameters b{font-size:clamp(36px,10vw,48px);font-weight:800;font-variant-numeric:tabular-nums}
+.timer-parameters em{font-size:16px;font-style:normal;font-weight:500;color:#d7f2e4}
+.timer-box .big{font-size:clamp(52px,14vw,68px);line-height:1.25;margin-top:8px}
+.timer-box #timerHint{font-size:15px;line-height:1.65;color:#d3e8db;margin:12px 0}
+.timer-box #totalClock{font-size:14px;color:#d7e9de;line-height:1.7}
+.timer-box.is-adjusting{border-color:#f1cf83;background:#3d3b29}
+.timer-box.is-adjusting #timerLabel{color:#ffe5ab}
+.timer-box.is-adjusting .timer-parameters>div{background:#ffe5ab15;border-color:#ffe5ab55}
+.timer-box .controls button{min-height:48px;font-size:17px}
+.timer-box .controls{gap:10px}
+@media(max-width:360px){.timer-box{padding:14px}.timer-parameters{gap:8px}.timer-parameters>div{padding:10px}.timer-parameters em{font-size:14px}}
+/* TIMER_ADJUSTMENT_V2_END */
+
+
+/* Personal equipment profiles; all text and native photo viewers work without scripts. */
+.machine-profile{margin:0 0 1rem;padding:1rem;border:1px solid var(--line,#d2e0d6);border-radius:15px;background:#f3f8f3}
+.profile-columns{display:grid;grid-template-columns:1fr 1fr;gap:1rem}.profile-columns>div{min-width:0}
+.machine-profile h3{margin:0 0 .55rem;font-size:1rem;line-height:1.45}.fixed-settings dl{margin:0;display:grid;gap:.4rem}.fixed-settings dl>div{display:flex;flex-wrap:wrap;gap:.35rem .75rem;align-items:baseline}.fixed-settings dt{font-size:.9rem;color:#5b7169}.fixed-settings dd{margin:0;font-size:1.1rem;font-weight:750}
+.last-training p{margin:.15rem 0}.last-training strong{font-size:1.3rem}.last-training small{display:block;color:#5b7169;line-height:1.55}.profile-help{font-size:.82rem;line-height:1.7;margin:.8rem 0 0;color:#5b7169}
+.model-status{font-size:.86rem;line-height:1.7;margin:.65rem 0 1rem}.model-confirmed strong{color:#356e55}
+.machine-picture{position:relative}.equipment-image-label{display:block;padding:.2rem .35rem;background:#edf3ed;font-size:.68rem;line-height:1.35;text-align:center;color:#395d50;border-radius:0 0 8px 8px}
+.setting-photos{margin-top:.8rem;border-top:1px solid #d2e0d6}.setting-photos>summary{padding:.8rem 0 .35rem;min-height:44px;cursor:pointer;font-weight:700;font-size:.94rem;touch-action:manipulation}.setting-photos .small{margin:.25rem 0 .7rem}.setting-photo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.8rem}.setting-photo-grid figure{margin:0;background:#fff;border-radius:10px;overflow:hidden}.setting-photo-grid img{display:block;width:100%;height:auto;max-height:470px;object-fit:contain}.setting-photo-grid figcaption{padding:.6rem;font-size:.83rem;line-height:1.5}.setting-photo-grid a{color:inherit}
+@media(max-width:420px){.machine-profile{padding:.85rem}.profile-columns{gap:.7rem;grid-template-columns:1fr 1fr}.machine-profile h3{font-size:.9rem}.last-training strong{font-size:1.15rem}.setting-photo-grid{grid-template-columns:1fr}}

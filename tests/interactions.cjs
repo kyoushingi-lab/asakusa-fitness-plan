@@ -1,3 +1,4 @@
+// All dates and loads below are synthetic test fixtures, not personal workout history.
 // Integration checks exercise the shipped HTML in a real browser.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -18,8 +19,10 @@ async function test(name, body, options = {}) {
   catch(e) { results.push({ name, pass: false, error: e.message }); console.log('FAIL', name, e.message.split('\n')[0]); }
   finally { await context.close(); }
 }
-async function open(page) { await page.goto(origin); }
-async function frozen(page, iso = '2026-10-19T03:00:00+09:00') { await page.clock.install({ time: new Date(iso) }); await open(page); }
+async function showCycle(page) { if(await page.locator('#cyclePanel').count()) await page.locator('#cyclePanel').evaluate(el=>el.open=true); }
+async function open(page) { await page.goto(origin); await showCycle(page); }
+async function reload(page) { await page.reload(); await showCycle(page); }
+async function frozen(page, iso = '2020-10-19T03:00:00+09:00') { await page.clock.install({ time: new Date(iso) }); await open(page); }
 async function text(page, id) { return page.locator(id).innerText(); }
 async function main() {
   server = http.createServer((req,res) => {
@@ -33,73 +36,73 @@ async function main() {
   await new Promise(r => server.listen(0, '127.0.0.1', r)); origin = `http://127.0.0.1:${server.address().port}`;
   browser = await (engine === 'webkit' ? webkit.launch() : chromium.launch());
   await test('flexible completed A keeps a visible entry for next B without overwriting today', async p => {
-    await frozen(p,'2026-10-21T12:00:00+09:00');
+    await frozen(p,'2020-10-21T12:00:00+09:00');
     assert.equal(await p.locator('#cycleNext').inputValue(),'a');
     await p.locator('#cycleComplete').tap();assert.equal(await p.locator('#cycleNext').inputValue(),'b');
     assert.equal(await p.locator('#cycleComplete').isEnabled(),true);
     assert.match(await text(p,'#cycleComplete'),/B.*日期/);
     await p.locator('#cycleComplete').tap();assert.equal(await p.locator('#cycleDate').inputValue(),'');
     assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-compatible.rotation.v1')).sessions.length),1);
-    await p.reload();assert.equal(await p.locator('#cycleNext').inputValue(),'b');
-    await p.locator('.cycle-history summary').first().tap();assert.match(await text(p,'#cycleLog'),/2026-10-21.*A/);
+    await reload(p);assert.equal(await p.locator('#cycleNext').inputValue(),'b');
+    await p.locator('.cycle-history summary').first().tap();assert.match(await text(p,'#cycleLog'),/2020-10-21.*A/);
     await p.locator('#cycleEdit').tap();await p.locator('#cycleUndo').tap();assert.equal(await p.locator('#cycleNext').inputValue(),'a');
     assert.equal(await p.locator('#cycleComplete').isEnabled(),true);
   });
   await test('flexible busy dates do not advance the cycle or overwrite training days', async p => {
-    await frozen(p,'2026-10-21T12:00:00+09:00');
-    await p.locator('#cycleDate').fill('2026-10-21');await p.locator('#busyToggle').tap();
+    await frozen(p,'2020-10-21T12:00:00+09:00');
+    await p.locator('#cycleDate').fill('2020-10-21');await p.locator('#busyToggle').tap();
     assert.equal(await p.locator('#cycleComplete').isDisabled(),true);assert.equal(await p.locator('#cycleNext').inputValue(),'a');
-    await p.locator('#cycleDate').fill('2026-10-22');await p.locator('#busyToggle').tap();
-    await p.reload();await p.locator('.cycle-history summary').first().tap();
-    assert.match(await p.locator('#cycleBusyList').textContent(),/2026-10-21.*2026-10-22/);
+    await p.locator('#cycleDate').fill('2020-10-22');await p.locator('#busyToggle').tap();
+    await reload(p);await p.locator('.cycle-history summary').first().tap();
+    assert.match(await p.locator('#cycleBusyList').textContent(),/2020-10-21.*2020-10-22/);
     assert.equal(await p.locator('.cycle-history').first().evaluate(el=>el.open),true);
-    await p.locator('#cycleDate').fill('2026-10-21');await p.locator('#busyToggle').tap();await p.locator('#cycleComplete').tap();
+    await p.locator('#cycleDate').fill('2020-10-21');await p.locator('#busyToggle').tap();await p.locator('#cycleComplete').tap();
     await p.locator('#busyToggle').tap();assert.match(await text(p,'#cycleStatus'),/已记录训练/);
     assert.equal(await p.locator('#cycleNext').inputValue(),'b');
   });
   await test('flexible two-session weeks continue across week boundaries without resetting', async p => {
-    await frozen(p,'2026-10-21T12:00:00+09:00');await p.locator('#cycleComplete').tap();
-    await p.clock.setSystemTime(new Date('2026-10-23T12:00:00+09:00'));await p.evaluate(()=>window.dispatchEvent(new Event('focus')));await p.locator('#cycleComplete').tap();
+    await frozen(p,'2020-10-21T12:00:00+09:00');await p.locator('#cycleComplete').tap();
+    await p.clock.setSystemTime(new Date('2020-10-23T12:00:00+09:00'));await p.evaluate(()=>window.dispatchEvent(new Event('focus')));await p.locator('#cycleComplete').tap();
     assert.match(await text(p,'#cycleWeek'),/2 次/);assert.equal(await p.locator('#cycleNext').inputValue(),'c');
-    await p.clock.setSystemTime(new Date('2026-10-28T12:00:00+09:00'));await p.evaluate(()=>window.dispatchEvent(new Event('focus')));
+    await p.clock.setSystemTime(new Date('2020-10-28T12:00:00+09:00'));await p.evaluate(()=>window.dispatchEvent(new Event('focus')));
     assert.match(await text(p,'#cycleWeek'),/0 次/);assert.equal(await p.locator('#cycleNext').inputValue(),'c');
-    assert.equal(await p.locator('#cycleDate').inputValue(),'2026-10-28');
+    assert.equal(await p.locator('#cycleDate').inputValue(),'2020-10-28');
     await p.locator('#cycleComplete').tap();assert.equal(await p.locator('#cycleNext').inputValue(),'a');
     assert.equal(await p.locator('#cycleLog li').count(),3);
   });
   await test('flexible existing A migrates intact and B can be completed on the next training date', async (p,c) => {
-    await c.addInitScript(()=>{if(!localStorage.getItem('seeded')){localStorage.setItem('gym-compatible.rotation.v1',JSON.stringify({version:1,next:'b',sessions:[{date:'2026-10-21',plan:'a',at:'2026-10-21T03:00:00Z'}],busy:['2026-10-22']}));localStorage.setItem('seeded','yes');}});
-    await frozen(p,'2026-10-23T12:00:00+09:00');assert.match(await text(p,'#cycleComplete'),/记录.*B/);assert.equal(await p.locator('#cycleComplete').isEnabled(),true);
-    await p.locator('#cycleComplete').tap();await p.reload();
-    const state=await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-compatible.rotation.v1')));assert.equal(state.sessions.length,2);assert.equal(state.sessions[0].plan,'a');assert.equal(state.sessions[1].plan,'b');assert.equal(state.next,'c');assert.deepEqual(state.busy,['2026-10-22']);
-    assert.match(await p.locator('#cycleCalendar button[data-date="2026-10-21"]').textContent(),/A/);
-    assert.match(await p.locator('#cycleCalendar button[data-date="2026-10-23"]').textContent(),/B/);
+    await c.addInitScript(()=>{if(!localStorage.getItem('seeded')){localStorage.setItem('gym-compatible.rotation.v1',JSON.stringify({version:1,next:'b',sessions:[{date:'2020-10-21',plan:'a',at:'2020-10-21T03:00:00Z'}],busy:['2020-10-22']}));localStorage.setItem('seeded','yes');}});
+    await frozen(p,'2020-10-23T12:00:00+09:00');assert.match(await text(p,'#cycleComplete'),/记录.*B/);assert.equal(await p.locator('#cycleComplete').isEnabled(),true);
+    await p.locator('#cycleComplete').tap();await reload(p);
+    const state=await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-compatible.rotation.v1')));assert.equal(state.sessions.length,2);assert.equal(state.sessions[0].plan,'a');assert.equal(state.sessions[1].plan,'b');assert.equal(state.next,'c');assert.deepEqual(state.busy,['2020-10-22']);
+    assert.match(await p.locator('#cycleCalendar button[data-date="2020-10-21"]').textContent(),/A/);
+    assert.match(await p.locator('#cycleCalendar button[data-date="2020-10-23"]').textContent(),/B/);
   });
   await test('flexible backdating and calendar navigation do not rewind the latest recommendation', async p => {
-    await frozen(p,'2026-10-23T12:00:00+09:00');await p.locator('#cycleComplete').tap();
-    await p.locator('#cycleDate').fill('2026-10-20');await p.locator('#cycleNext').selectOption('c');await p.locator('#cycleComplete').tap();
+    await frozen(p,'2020-10-23T12:00:00+09:00');await p.locator('#cycleComplete').tap();
+    await p.locator('#cycleDate').fill('2020-10-20');await p.locator('#cycleNext').selectOption('c');await p.locator('#cycleComplete').tap();
     assert.match(await text(p,'#cycleRecommendation'),/B/);
-    await p.locator('#cycleCalendar button[data-date="2026-10-20"]').tap();assert.match(await text(p,'#cycleSelectedStatus'),/已完成 C/);
+    await p.locator('#cycleCalendar button[data-date="2020-10-20"]').tap();assert.match(await text(p,'#cycleSelectedStatus'),/已完成 C/);
     await p.locator('#cycleEdit').tap();await p.locator('#cycleNext').selectOption('b');await p.locator('#cycleComplete').tap();
     assert.match(await text(p,'#cycleRecommendation'),/B/);
-    await p.locator('#cyclePrevWeek').tap();assert.equal(await p.locator('#cycleCalendar button[data-date="2026-10-13"]').count(),1);
-    await p.locator('#cycleToday').tap();assert.equal(await p.locator('#cycleDate').inputValue(),'2026-10-23');
+    await p.locator('#cyclePrevWeek').tap();assert.equal(await p.locator('#cycleCalendar button[data-date="2020-10-13"]').count(),1);
+    await p.locator('#cycleToday').tap();assert.equal(await p.locator('#cycleDate').inputValue(),'2020-10-23');
   });
   await test('flexible corrections require an explicit edit and future dates cannot be marked complete', async p => {
-    await frozen(p,'2026-10-21T12:00:00+09:00');await p.locator('#cycleComplete').tap();
+    await frozen(p,'2020-10-21T12:00:00+09:00');await p.locator('#cycleComplete').tap();
     await p.locator('#cycleNext').selectOption('c');await p.locator('#cycleComplete').tap();
     assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-compatible.rotation.v1')).sessions[0].plan),'a');
-    await p.locator('#cycleDate').fill('2026-10-22');assert.equal(await p.locator('#cycleComplete').isDisabled(),true);assert.match(await text(p,'#cycleSelectedStatus'),/未来/);
-    await p.locator('#cycleDate').fill('2026-10-21');await p.locator('#cycleEdit').tap();await p.locator('#cycleNext').selectOption('b');await p.locator('#cycleComplete').tap();
+    await p.locator('#cycleDate').fill('2020-10-22');assert.equal(await p.locator('#cycleComplete').isDisabled(),true);assert.match(await text(p,'#cycleSelectedStatus'),/未来/);
+    await p.locator('#cycleDate').fill('2020-10-21');await p.locator('#cycleEdit').tap();await p.locator('#cycleNext').selectOption('b');await p.locator('#cycleComplete').tap();
     assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-compatible.rotation.v1')).sessions[0].plan),'b');assert.match(await text(p,'#cycleRecommendation'),/C/);
     await p.locator('#cycleEdit').tap();await p.locator('#cycleUndo').tap();assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-compatible.rotation.v1')).sessions.length),0);
     await p.locator('#cycleRestore').tap();assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-compatible.rotation.v1')).sessions[0].plan),'b');
   });
   await test('flexible new check-ins retain legacy weights and use separate daily posture keys', async (p,c) => {
-    await c.addInitScript(()=>{if(!localStorage.getItem('test-seeded')){localStorage.setItem('gym-compatible.load.row','17.5');localStorage.setItem('gym-compatible.done.2026-10-21.mon-row','yes');localStorage.setItem('test-seeded','yes');}});
-    await frozen(p,'2026-10-21T12:00:00+09:00');assert.equal(await p.locator('#mon-row input.load').inputValue(),'17.5');assert.equal(await p.locator('#mon-row input.done').isChecked(),true);
-    const posture=p.locator('input.done[data-key="posture-daily"]');await posture.check();await p.reload();assert.equal(await posture.isChecked(),true);
-    await p.clock.setSystemTime(new Date('2026-10-22T12:00:00+09:00'));await p.evaluate(()=>window.dispatchEvent(new Event('focus')));assert.equal(await posture.isChecked(),false);assert.equal(await p.locator('#mon-row input.load').inputValue(),'17.5');
+    await c.addInitScript(()=>{if(!localStorage.getItem('test-seeded')){localStorage.setItem('gym-compatible.load.row','17.5');localStorage.setItem('gym-compatible.done.2020-10-21.mon-row','yes');localStorage.setItem('test-seeded','yes');}});
+    await frozen(p,'2020-10-21T12:00:00+09:00');assert.equal(await p.locator('#mon-row input.load').inputValue(),'17.5');assert.equal(await p.locator('#mon-row input.done').isChecked(),true);
+    const posture=p.locator('input.done[data-key="posture-daily"]');await posture.check();await reload(p);assert.equal(await posture.isChecked(),true);
+    await p.clock.setSystemTime(new Date('2020-10-22T12:00:00+09:00'));await p.evaluate(()=>window.dispatchEvent(new Event('focus')));assert.equal(await posture.isChecked(),false);assert.equal(await p.locator('#mon-row input.load').inputValue(),'17.5');
   });
   await test('flexible corrupt schedule cannot overwrite saved data or break other features', async (p,c) => {
     await c.addInitScript(()=>localStorage.setItem('gym-compatible.rotation.v1','{broken'));
@@ -142,21 +145,21 @@ async function main() {
   },{javaScriptEnabled:false});
   await test('confirmed equipment settings appear on every matching training day without inventing row weight', async p => {
     await open(p);
-    for (const id of ['mon-chest','fri-chest']) assert.match(await text(p, '#'+id+' .personal-setup'), /座位 2[\s\S]*7\.5 kg/);
+    for (const id of ['mon-chest','fri-chest']) assert.match(await text(p, '#'+id+' .machine-profile'), /座位\s*2[\s\S]*待记录/);
     for (const id of ['mon-row','fri-row']) {
-      const settings = await text(p, '#'+id+' .personal-setup');
-      assert.match(settings, /前后调节 10[\s\S]*高度第 9 格/);
-      assert.match(settings, /重量未记录/);
+      const settings = await text(p, '#'+id+' .machine-profile');
+      assert.match(settings, /前后调节\s*10[\s\S]*高度\s*第 9 格/);
+      assert.match(settings, /上次训练重量（kg）[\s\S]*待记录/);
       assert.equal(await p.locator('#'+id+' input.load').inputValue(),'');
     }
-    assert.match(await text(p,'#mon-triceps .personal-setup'), /座位 7[\s\S]*调节 D/);
+    assert.match(await text(p,'#mon-triceps .machine-profile'), /座位\s*7[\s\S]*调节档位\s*D/);
     assert.equal(await p.locator('#mon-triceps input.load').inputValue(),'');
   });
   await test('confirmed chest load is an editable default and never overwrites saved or intentionally cleared weights', async p => {
     await open(p); assert.equal(await p.locator('#mon-chest input.load').inputValue(),'7.5');
-    await p.locator('#mon-chest input.load').fill('15'); await p.reload();
+    await p.locator('#mon-chest input.load').fill('15'); await reload(p);
     assert.equal(await p.locator('#fri-chest input.load').inputValue(),'15');
-    await p.locator('#fri-chest input.load').fill(''); await p.reload();
+    await p.locator('#fri-chest input.load').fill(''); await reload(p);
     assert.equal(await p.locator('#mon-chest input.load').inputValue(),'');
   });
   await test('all five video buttons open the correct external video and retain the running workout page', async (p,c) => {
@@ -189,7 +192,7 @@ async function main() {
   await test('weights persist before blur and synchronize repeated machines', async p => {
     await open(p); await p.locator('input.load[data-key="pulldown"]').first().fill('17.5');
     assert.equal(await p.locator('input.load[data-key="pulldown"]').last().inputValue(), '17.5');
-    await p.reload(); assert.equal(await p.locator('input.load[data-key="pulldown"]').first().inputValue(), '17.5');
+    await reload(p); assert.equal(await p.locator('input.load[data-key="pulldown"]').first().inputValue(), '17.5');
   });
   await test('weight history saves a settled value with local date, survives reload, and deduplicates repeated cards', async p => {
     await frozen(p);
@@ -197,26 +200,26 @@ async function main() {
     await p.locator('#mon-row input.load').fill('17.5');
     await p.clock.fastForward(1200);
     assert.equal(await p.locator('#historyRows tr').count(),1);
-    assert.match(await text(p,'#historyRows'), /2026-10-19[\s\S]*划船[\s\S]*17\.5/);
+    assert.match(await text(p,'#historyRows'), /2020-10-19[\s\S]*划船[\s\S]*17\.5/);
     await p.locator('#fri-row input.load').fill('17.5');
     await p.clock.fastForward(1200);
     assert.equal(await p.locator('#historyRows tr').count(),1);
-    await p.reload();
+    await reload(p);
     assert.equal(await p.locator('#historyRows tr').count(),1);
     await p.locator('#mon-row input.load').fill('20');
-    await p.reload();
+    await reload(p);
     assert.equal(await p.locator('#historyRows tr').count(),2);
     assert.match(await text(p,'#historyRows tr:first-child'),/20/);
   });
   await test('same weight on a new local day becomes a separate dated entry and invalid or empty weights do not', async p => {
-    await frozen(p,'2026-10-19T23:59:58+09:00');
+    await frozen(p,'2020-10-19T23:59:58+09:00');
     await p.locator('#mon-chest input.load').fill('7.5');
     await p.clock.fastForward(1200);
     await p.clock.fastForward(2000);
     await p.locator('#fri-chest input.load').fill('7.5');
     await p.clock.fastForward(1200);
     assert.equal(await p.locator('#historyRows tr').count(),2);
-    assert.match(await text(p,'#historyRows tr:first-child'),/2026-10-20/);
+    assert.match(await text(p,'#historyRows tr:first-child'),/2020-10-20/);
     await p.locator('#mon-chest input.load').fill('-1');
     await p.clock.fastForward(1200);
     await p.locator('#mon-chest input.load').fill('');
@@ -229,14 +232,14 @@ async function main() {
     assert.match(await text(p,'#historyRows'),/11\.25 kg/);
     await p.locator('#mon-row input.load').fill('3.75');await p.clock.fastForward(1200);
     assert.equal(await p.locator('#historyRows tr').count(),2);
-    await p.reload();assert.equal(await p.locator('#mon-chest input.load').inputValue(),'11.25');
+    await reload(p);assert.equal(await p.locator('#mon-chest input.load').inputValue(),'11.25');
   });
   await test('history JSON export restores dates and weights in another browser without duplicating imports', async (p,c) => {
     await frozen(p);await p.locator('#mon-row input.load').fill('22.5');
     const downloadEvent=p.waitForEvent('download');await p.locator('#exportHistory').click();
     const download=await downloadEvent;const buffer=fs.readFileSync(await download.path());
-    const backup=JSON.parse(buffer.toString());assert.equal(backup.entries[0].kg,22.5);assert.equal(backup.entries[0].date,'2026-10-19');
-    await p.evaluate(()=>localStorage.clear());await p.reload();
+    const backup=JSON.parse(buffer.toString());assert.equal(backup.entries[0].kg,22.5);assert.equal(backup.entries[0].date,'2020-10-19');
+    await p.evaluate(()=>localStorage.clear());await reload(p);
     assert.equal(await p.locator('#historyRows tr').count(),0);
     const payload={name:'backup.json',mimeType:'application/json',buffer};
     await p.locator('#importHistory').setInputFiles(payload);
@@ -245,14 +248,14 @@ async function main() {
     await p.locator('#importHistory').setInputFiles(payload);
     await p.waitForFunction(()=>document.querySelector('#historyStatus').textContent.includes('导入 0'));
     assert.equal(await p.locator('#historyRows tr').count(),1);
-    const invalid={...backup,entries:[{...backup.entries[0],exercise:'<script>',date:'2026-02-31'}]};
+    const invalid={...backup,entries:[{...backup.entries[0],exercise:'<script>',date:'2020-02-31'}]};
     await p.locator('#importHistory').setInputFiles({name:'bad.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(invalid))});
     await p.waitForFunction(()=>document.querySelector('#historyStatus').textContent.includes('导入失败'));
     assert.equal(await p.locator('#historyRows tr').count(),1);
     await p.locator('#historyFilter').selectOption('chest');assert.equal(await p.locator('#historyRows tr').count(),0);
     await p.locator('#historyFilter').selectOption('row');assert.equal(await p.locator('#historyRows tr').count(),1);
     const csvEvent=p.waitForEvent('download');await p.locator('#exportCsv').click();const csv=fs.readFileSync(await (await csvEvent).path(),'utf8');
-    assert.match(csv,/2026-10-19,03:00,坐姿划船,22.5/);
+    assert.match(csv,/2020-10-19,03:00,坐姿划船,22.5/);
   });
   await test('unreadable history is preserved without blocking latest weights or the timer', async p => {
     await p.addInitScript(()=>localStorage.setItem('gym-compatible.history.v1','broken history'));
@@ -263,22 +266,22 @@ async function main() {
   });
   await test('local Japanese date is used for check-in, and reload restores it', async p => {
     await frozen(p); await p.locator('input.done').first().check();
-    assert.equal(await p.evaluate(() => localStorage.getItem('gym-compatible.done.2026-10-19.mon-pulldown')), 'yes');
-    await p.reload(); assert.equal(await p.locator('input.done').first().isChecked(), true);
+    assert.equal(await p.evaluate(() => localStorage.getItem('gym-compatible.done.2020-10-19.mon-pulldown')), 'yes');
+    await reload(p); assert.equal(await p.locator('input.done').first().isChecked(), true);
   });
   await test('an open page switches check-ins after local midnight', async p => {
-    await frozen(p, '2026-10-19T23:59:58+09:00'); await p.locator('input.done').first().check();
+    await frozen(p, '2020-10-19T23:59:58+09:00'); await p.locator('input.done').first().check();
     await p.clock.fastForward(4000); await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
     assert.equal(await p.locator('input.done').first().isChecked(), false);
     await p.locator('input.done').first().check();
-    assert.equal(await p.evaluate(() => localStorage.getItem('gym-compatible.done.2026-10-20.mon-pulldown')), 'yes');
+    assert.equal(await p.evaluate(() => localStorage.getItem('gym-compatible.done.2020-10-20.mon-pulldown')), 'yes');
   });
-  await test('timer automatically continues at the six-minute boundary', async p => {
+  await test('timer allows a ten-second adjustment at the six-minute boundary', async p => {
     await frozen(p); await p.locator('#play').tap(); await p.clock.fastForward(361000);
-    assert.match(await text(p,'#timerLabel'), /第2\/5段/); assert.equal(await text(p,'#clock'),'05:59'); assert.match(await text(p,'#play'), /暂停/);
+    assert.match(await text(p,'#timerLabel'), /第2\/5段/); assert.equal(await text(p,'#clock'),'00:09'); assert.match(await text(p,'#play'), /暂停/);
   });
-  await test('timer catches up after backgrounding, completes at 30 minutes and stays complete', async p => {
-    await frozen(p); await p.locator('#play').tap(); await p.clock.fastForward(1801000);
+  await test('timer catches up after backgrounding, completes at 30 minutes plus four gaps and stays complete', async p => {
+    await frozen(p); await p.locator('#play').tap(); await p.clock.fastForward(1841000);
     assert.equal(await text(p,'#clock'),'00:00'); assert.match(await text(p,'#timerLabel'), /完成/);
     await p.clock.fastForward(60000); assert.equal(await text(p,'#clock'),'00:00');
   });
@@ -290,8 +293,8 @@ async function main() {
   });
   await test('manual next preserves running state and final next completes', async p => {
     await frozen(p); await p.locator('#play').tap(); await p.locator('#next').tap(); await p.clock.fastForward(1000);
-    assert.equal(await text(p,'#clock'),'05:59');
-    for(let i=0;i<4;i++) await p.locator('#next').tap();
+    assert.equal(await text(p,'#clock'),'00:09');
+    for(let i=0;i<8;i++) await p.locator('#next').tap();
     assert.equal(await text(p,'#clock'),'00:00'); assert.match(await text(p,'#timerLabel'), /完成/);
   });
   await test('storage read exception cannot break timer initialization', async p => {

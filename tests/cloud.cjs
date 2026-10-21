@@ -1,3 +1,4 @@
+// All dates and loads below are synthetic test fixtures, not personal workout history.
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict');
 fs.mkdirSync(require('node:path').join(__dirname,'../test-results'),{recursive:true});
 const {webkit,chromium}=require('playwright');
@@ -31,7 +32,10 @@ await a.p.locator('#syncNow').click();await a.p.waitForFunction(()=>document.que
 await a.p.locator('#mon-row input.load').fill('');await a.p.locator('#syncNow').click();await a.p.waitForFunction(()=>document.querySelector('#syncStatus').textContent.startsWith('已同步'));assert.equal(await a.p.locator('#mon-row input.load').inputValue(),'');assert.equal(records.length,2);console.log('PASS repeated sync neither duplicates records nor restores intentionally cleared weight');
 fail=true;await a.p.locator('#mon-chest input.load').fill('15');await a.p.locator('#syncNow').click();await a.p.waitForFunction(()=>document.querySelector('#syncStatus').textContent.includes('本机记录已保留'));assert.equal(await a.p.locator('#historyRows tr').count(),3);
 fail=false;await a.p.locator('#syncNow').click();await a.p.waitForFunction(()=>document.querySelector('#syncStatus').textContent.includes('3 条'));assert.equal(records.length,3);console.log('PASS server error preserves local history and retries without data loss');
+const dateOnly={app:'asakusa-personal-profile',version:1,entries:[{id:'date-only:2020-01-04:glute:33.75',exercise:'glute',kg:33.75,date:'2020-01-04',time:'00:00',at:'2020-01-03T15:00:00.000Z'}],sessions:[{date:'2020-01-04',plan:'b',completed:['glute'],skipped:{}}]};
+await b.p.locator('.workout-import > summary').click();await b.p.locator('#importWorkout').setInputFiles({name:'synthetic-profile.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(dateOnly))});await b.p.locator('#applyWorkoutImport').click();await b.p.waitForFunction(()=>document.querySelector('#syncStatus').textContent.includes('4 条'));
+assert.equal(records.length,4);const c=await device();await c.p.waitForFunction(()=>document.querySelector('#historyRows').children.length===4);assert.match(await c.p.locator('#historyRows').innerText(),/2020-01-04 时间未记录/);assert.equal(await c.p.locator('#wed-glute [data-last-weight]').innerText(),'33.75 kg');await c.c.close();console.log('PASS imported date-only history automatically syncs and retains unknown time on another device');
 await a.p.evaluate(s=>localStorage.setItem('sb-fitness-test-auth-token',JSON.stringify(s)),session('22222222-2222-4222-8222-222222222222'));await a.p.reload();await a.p.waitForFunction(()=>document.querySelector('#syncStatus').textContent.includes('另一个账号'));assert.equal(blockedRequests,0);console.log('PASS different account cannot upload or merge the existing browser history');
 await b.p.locator('#sync').scrollIntoViewIfNeeded();await b.p.screenshot({path:path.join(__dirname,'../test-results/sync-'+engine+'.png')});
-await a.c.close();await b.c.close();console.log(engine+': 6 cloud integration scenarios passed (simulated server, real client)');
+await a.c.close();await b.c.close();console.log(engine+': 7 cloud integration scenarios passed (simulated server, real client)');
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{if(browser)await browser.close();if(server)server.close();});
