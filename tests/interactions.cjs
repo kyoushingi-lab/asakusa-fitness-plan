@@ -14,14 +14,20 @@ async function test(name, body, options = {}) {
   if (process.argv[4] && !name.includes(process.argv[4])) return;
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, timezoneId: 'Asia/Tokyo', ...options });
   const page = await context.newPage();
+  page.scriptsEnabled = options.javaScriptEnabled !== false;
   page.setDefaultTimeout(4000);
   try { await body(page, context); results.push({ name, pass: true }); console.log('PASS', name); }
   catch(e) { results.push({ name, pass: false, error: e.message }); console.log('FAIL', name, e.message.split('\n')[0]); }
   finally { await context.close(); }
 }
 async function showCycle(page) { if(await page.locator('#cyclePanel').count()) await page.locator('#cyclePanel').evaluate(el=>el.open=true); }
-async function open(page) { await page.goto(origin); await showCycle(page); }
-async function reload(page) { await page.reload(); await showCycle(page); }
+async function ready(page) {
+  if(page.scriptsEnabled===false)return;
+  await page.waitForFunction(()=>/交互已启用|组件暂未加载/.test(document.querySelector('#runtimeStatus').textContent));
+  assert.match(await page.locator('#runtimeStatus').textContent(),/交互已启用/,'account initialization completes before interactive assertions');
+}
+async function open(page) { await page.goto(origin); await ready(page); await showCycle(page); }
+async function reload(page) { await page.reload(); await ready(page); await showCycle(page); }
 async function frozen(page, iso = '2020-10-19T03:00:00+09:00') { await page.clock.install({ time: new Date(iso) }); await open(page); }
 async function text(page, id) { return page.locator(id).innerText(); }
 async function main() {
@@ -42,7 +48,7 @@ async function main() {
     assert.equal(await p.locator('#cycleComplete').isEnabled(),true);
     assert.match(await text(p,'#cycleComplete'),/B.*日期/);
     await p.locator('#cycleComplete').tap();assert.equal(await p.locator('#cycleDate').inputValue(),'');
-    assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-compatible.rotation.v1')).sessions.length),1);
+    assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-account.v2|guest|gym-compatible.rotation.v1')).sessions.length),1);
     await reload(p);assert.equal(await p.locator('#cycleNext').inputValue(),'b');
     await p.locator('.cycle-history summary').first().tap();assert.match(await text(p,'#cycleLog'),/2020-10-21.*A/);
     await p.locator('#cycleEdit').tap();await p.locator('#cycleUndo').tap();assert.equal(await p.locator('#cycleNext').inputValue(),'a');
@@ -74,7 +80,7 @@ async function main() {
     await c.addInitScript(()=>{if(!localStorage.getItem('seeded')){localStorage.setItem('gym-compatible.rotation.v1',JSON.stringify({version:1,next:'b',sessions:[{date:'2020-10-21',plan:'a',at:'2020-10-21T03:00:00Z'}],busy:['2020-10-22']}));localStorage.setItem('seeded','yes');}});
     await frozen(p,'2020-10-23T12:00:00+09:00');assert.match(await text(p,'#cycleComplete'),/记录.*B/);assert.equal(await p.locator('#cycleComplete').isEnabled(),true);
     await p.locator('#cycleComplete').tap();await reload(p);
-    const state=await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-compatible.rotation.v1')));assert.equal(state.sessions.length,2);assert.equal(state.sessions[0].plan,'a');assert.equal(state.sessions[1].plan,'b');assert.equal(state.next,'c');assert.deepEqual(state.busy,['2020-10-22']);
+    const state=await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-account.v2|guest|gym-compatible.rotation.v1')));assert.equal(state.sessions.length,2);assert.equal(state.sessions[0].plan,'a');assert.equal(state.sessions[1].plan,'b');assert.equal(state.next,'c');assert.deepEqual(state.busy,['2020-10-22']);
     assert.match(await p.locator('#cycleCalendar button[data-date="2020-10-21"]').textContent(),/A/);
     assert.match(await p.locator('#cycleCalendar button[data-date="2020-10-23"]').textContent(),/B/);
   });
@@ -91,12 +97,12 @@ async function main() {
   await test('flexible corrections require an explicit edit and future dates cannot be marked complete', async p => {
     await frozen(p,'2020-10-21T12:00:00+09:00');await p.locator('#cycleComplete').tap();
     await p.locator('#cycleNext').selectOption('c');await p.locator('#cycleComplete').tap();
-    assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-compatible.rotation.v1')).sessions[0].plan),'a');
+    assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-account.v2|guest|gym-compatible.rotation.v1')).sessions[0].plan),'a');
     await p.locator('#cycleDate').fill('2020-10-22');assert.equal(await p.locator('#cycleComplete').isDisabled(),true);assert.match(await text(p,'#cycleSelectedStatus'),/未来/);
     await p.locator('#cycleDate').fill('2020-10-21');await p.locator('#cycleEdit').tap();await p.locator('#cycleNext').selectOption('b');await p.locator('#cycleComplete').tap();
-    assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-compatible.rotation.v1')).sessions[0].plan),'b');assert.match(await text(p,'#cycleRecommendation'),/C/);
-    await p.locator('#cycleEdit').tap();await p.locator('#cycleUndo').tap();assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-compatible.rotation.v1')).sessions.length),0);
-    await p.locator('#cycleRestore').tap();assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-compatible.rotation.v1')).sessions[0].plan),'b');
+    assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-account.v2|guest|gym-compatible.rotation.v1')).sessions[0].plan),'b');assert.match(await text(p,'#cycleRecommendation'),/C/);
+    await p.locator('#cycleEdit').tap();await p.locator('#cycleUndo').tap();assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-account.v2|guest|gym-compatible.rotation.v1')).sessions.length),0);
+    await p.locator('#cycleRestore').tap();assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem('gym-account.v2|guest|gym-compatible.rotation.v1')).sessions[0].plan),'b');
   });
   await test('flexible new check-ins retain legacy weights and use separate daily posture keys', async (p,c) => {
     await c.addInitScript(()=>{if(!localStorage.getItem('test-seeded')){localStorage.setItem('gym-compatible.load.row','17.5');localStorage.setItem('gym-compatible.done.2020-10-21.mon-row','yes');localStorage.setItem('test-seeded','yes');}});
@@ -107,7 +113,7 @@ async function main() {
   await test('flexible corrupt schedule cannot overwrite saved data or break other features', async (p,c) => {
     await c.addInitScript(()=>localStorage.setItem('gym-compatible.rotation.v1','{broken'));
     await open(p);assert.match(await text(p,'#cycleStatus'),/无法读取/);assert.equal(await p.locator('#cycleComplete').isDisabled(),true);
-    await p.locator('#play').tap();assert.match(await text(p,'#play'),/暂停/);assert.equal(await p.evaluate(()=>localStorage.getItem('gym-compatible.rotation.v1')),'{broken');
+    await p.locator('#play').tap();assert.match(await text(p,'#play'),/暂停/);assert.equal(await p.evaluate(()=>localStorage.getItem('gym-account.v2|guest|gym-compatible.rotation.v1')),'{broken');
   });
   await test('flexible all routines and posture steps are readable with no JavaScript', async p => {
     await open(p);assert.equal(await p.locator('.machine-details:visible').count(),15);
@@ -146,7 +152,12 @@ async function main() {
     assert.equal(await p.locator('#wed-glute .setting-photos img').isVisible(),true);
     assert.ok(await p.locator('#wed-glute .setting-photos img').evaluate(i=>i.complete&&i.naturalWidth>=600));
   },{javaScriptEnabled:false});
-  await test('confirmed equipment settings appear on every matching training day without inventing row weight', async p => {
+  await test('legacy equipment settings migrate into guest scope on every matching training day without inventing row weight', async (p,c) => {
+    await c.addInitScript(()=>{
+      if(localStorage.getItem('legacy-settings-seeded'))return;
+      Object.entries({'chest.seat':'2','row.fore_aft':'10','row.height':'第 9 格','triceps.seat':'7','triceps.adjustment':'D'}).forEach(([key,value])=>localStorage.setItem('gym-compatible.setting.'+key,value));
+      localStorage.setItem('legacy-settings-seeded','yes');
+    });
     await open(p);
     for (const id of ['mon-chest','fri-chest']) assert.match(await text(p, '#'+id+' .machine-profile'), /座位\s*2[\s\S]*待记录/);
     for (const id of ['mon-row','fri-row']) {
@@ -157,13 +168,19 @@ async function main() {
     }
     assert.match(await text(p,'#mon-triceps .machine-profile'), /座位\s*7[\s\S]*调节档位\s*D/);
     assert.equal(await p.locator('#mon-triceps input.load').inputValue(),'');
+    assert.equal(await p.evaluate(()=>localStorage.getItem('gym-account.v2|guest|gym-compatible.setting.row.fore_aft')),'10');
   });
-  await test('confirmed chest load is an editable default and never overwrites saved or intentionally cleared weights', async p => {
-    await open(p); assert.equal(await p.locator('#mon-chest input.load').inputValue(),'7.5');
+  await test('new guest starts without owner chest defaults and preserves saved or intentionally cleared weights', async p => {
+    await open(p); assert.equal(await p.locator('#mon-chest input.load').inputValue(),'');
+    assert.equal(await p.locator('#mon-chest .fixed-settings dd').innerText(),'待记录');
+    assert.ok((await p.locator('.fixed-settings dd').allTextContents()).every(value=>value==='待记录'),'new guests do not inherit the owner settings shown in static fallback content');
     await p.locator('#mon-chest input.load').fill('15'); await reload(p);
     assert.equal(await p.locator('#fri-chest input.load').inputValue(),'15');
+    assert.equal(await p.evaluate(()=>localStorage.getItem('gym-account.v2|guest|gym-compatible.load.chest')),'15');
+    assert.equal(await p.evaluate(()=>localStorage.getItem('gym-compatible.load.chest')),null,'new records do not leak into legacy global keys');
     await p.locator('#fri-chest input.load').fill(''); await reload(p);
     assert.equal(await p.locator('#mon-chest input.load').inputValue(),'');
+    assert.equal(await p.evaluate(()=>localStorage.getItem('gym-account.v2|guest|gym-compatible.load.chest')),'');
   });
   await test('all five video buttons open the correct external video and retain the running workout page', async (p,c) => {
     await c.route('https://**/*', r => r.fulfill({contentType:'text/html',body:'<title>External video navigation test</title>'}));
@@ -265,11 +282,11 @@ async function main() {
     await open(p);assert.match(await text(p,'#historyStatus'),/保留原数据/);
     await p.locator('#mon-row input.load').fill('15');await p.locator('#play').click();
     assert.match(await text(p,'#play'),/暂停/);
-    assert.equal(await p.evaluate(()=>localStorage.getItem('gym-compatible.history.v1')),'broken history');
+    assert.equal(await p.evaluate(()=>localStorage.getItem('gym-account.v2|guest|gym-compatible.history.v1')),'broken history');
   });
   await test('local Japanese date is used for check-in, and reload restores it', async p => {
     await frozen(p); await p.locator('input.done').first().check();
-    assert.equal(await p.evaluate(() => localStorage.getItem('gym-compatible.done.2020-10-19.mon-pulldown')), 'yes');
+    assert.equal(await p.evaluate(() => localStorage.getItem('gym-account.v2|guest|gym-compatible.done.2020-10-19.mon-pulldown')), 'yes');
     await reload(p); assert.equal(await p.locator('input.done').first().isChecked(), true);
   });
   await test('an open page switches check-ins after local midnight', async p => {
@@ -277,7 +294,7 @@ async function main() {
     await p.clock.fastForward(4000); await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
     assert.equal(await p.locator('input.done').first().isChecked(), false);
     await p.locator('input.done').first().check();
-    assert.equal(await p.evaluate(() => localStorage.getItem('gym-compatible.done.2020-10-20.mon-pulldown')), 'yes');
+    assert.equal(await p.evaluate(() => localStorage.getItem('gym-account.v2|guest|gym-compatible.done.2020-10-20.mon-pulldown')), 'yes');
   });
   await test('timer allows a ten-second adjustment at the six-minute boundary', async p => {
     await frozen(p); await p.locator('#play').tap(); await p.clock.fastForward(361000);

@@ -4,8 +4,9 @@
   "version": "1.0.0",
   "description": "Mobile fitness plan and dated weight history",
   "scripts": {
-    "test:webkit": "node tests/interactions.cjs index.html webkit && node tests/cloud.cjs webkit",
-    "test:chromium": "node tests/interactions.cjs index.html chromium && node tests/cloud.cjs chromium",
+    "test:webkit": "node tests/interactions.cjs index.html webkit && node tests/accounts-browser.cjs webkit && node tests/cloud.cjs webkit",
+    "test:chromium": "node tests/interactions.cjs index.html chromium && node tests/accounts-browser.cjs chromium && node tests/cloud.cjs chromium",
+    "test:accounts": "node tests/account-store.cjs && node tests/account-sync.cjs",
     "build:offline": "node scripts/build-singlefile.cjs",
     "test:upgrades": "node tests/personal-upgrade.cjs webkit && node tests/timer-upgrade.cjs . webkit && node tests/equipment-upgrade.cjs webkit"
   },

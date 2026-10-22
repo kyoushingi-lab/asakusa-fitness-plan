@@ -1,6 +1,24 @@
 
-(function () {
+(async function () {
   'use strict';
+  var fields={pulldown:['position'],row:['fore_aft','height'],chest:['seat'],triceps:['seat','adjustment'],abs:['height'],glute:['position'],legpress:['position'],legcurl:['roller','start'],abductor:['position']};
+  var seedSettings={},settingInputs=[];
+  document.querySelectorAll('[data-machine-profile]').forEach(function(profile,index){
+    var machine=profile.dataset.machineProfile,box=profile.querySelector('.fixed-settings');
+    var editor=document.createElement('details');editor.className='setting-editor';
+    var summary=document.createElement('summary');summary.textContent='修改我的设置';editor.appendChild(summary);
+    box.querySelectorAll('dl>div').forEach(function(row,position){
+      var key=machine+'.'+fields[machine][position],dd=row.querySelector('dd'),value=dd.textContent.trim();
+      if(value!=='待记录')seedSettings['gym-compatible.setting.'+key]=value;
+      dd.dataset.settingValue=key;
+      var label=document.createElement('label'),input=document.createElement('input');
+      label.textContent=row.querySelector('dt').textContent;input.type='text';input.maxLength=80;input.placeholder='待记录';input.autocomplete='off';input.dataset.setting=key;
+      input.id='setting-'+index+'-'+position;label.htmlFor=input.id;label.appendChild(input);editor.appendChild(label);settingInputs.push(input);
+    });box.appendChild(editor);
+  });
+  var account=await window.GymAccounts.open({seedSettings:seedSettings}),accountStore=account.store;
+  if(!account.isCurrent())return;
+
     function initWeightHistory(read, write, loads, localDay) {
     var names = {pulldown:'高位下拉',row:'坐姿划船',chest:'坐姿胸推',triceps:'三头肌训练机',abs:'腹肌训练机',legpress:'腿举机',glute:'臀部训练机',legcurl:'卧姿腿弯举',abductor:'髋外展机'};
     var historyKey = 'gym-compatible.history.v1';
@@ -118,8 +136,12 @@
     render();
     return {
       flush:flush,
+      refreshFromStore:function(){
+        try{var saved=JSON.parse(read(historyKey)||'[]');if(!Array.isArray(saved)||!saved.every(valid))throw Error('Invalid history');entries=saved;locked=false;}catch(error){locked=true;}
+        render();
+      },
       getEntries:function(){return entries.map(function(e){return Object.assign({},e);});},
-      subscribe:function(fn){listeners.push(fn);},
+      subscribe:function(fn){listeners.push(fn);return function(){listeners=listeners.filter(function(old){return old!==fn;});};},
       merge:function(incoming,imported){
         if(locked)throw new Error('本机历史无法读取，请先导出备份并恢复。');
         if(!Array.isArray(incoming)||!incoming.every(valid))throw new Error('云端记录格式无效。');
@@ -159,81 +181,6 @@
       bundle.sessions.forEach(function(s){var prefix={a:'mon',b:'wed',c:'fri'}[s.plan];s.completed.forEach(function(k){write('gym-compatible.done.'+s.date+'.'+prefix+'-'+k,'yes');});Object.keys(s.skipped).forEach(function(k){write('gym-compatible.done.'+s.date+'.'+prefix+'-'+k,'no');});});
       window.dispatchEvent(new Event('gym-checkins-imported'));status.textContent=document.getElementById('syncStatus')?'已导入训练日期与重量。重量沿用账号同步；训练完成情况保存在本机。':'已导入训练日期与重量，保存在当前浏览器。';apply.hidden=true;bundle=null;input.value='';
     }catch(e){status.textContent='导入未完成：请先导出本机备份，检查历史数据后重试。';}});
-  }
-
-    function initCloudSync(history,read,write){
-    var status=document.getElementById('syncStatus'),form=document.getElementById('syncLogin');
-    var email=document.getElementById('syncEmail');
-    var send=document.getElementById('syncSend');
-    var manual=document.getElementById('syncNow'),logout=document.getElementById('syncLogout');
-    var account=document.getElementById('syncAccount'),client=null,user=null,busy=false,rerun=false,timer=null,epoch=0;
-    var ownerKey='gym-compatible.sync-owner.v1';
-    function say(text){status.textContent=text;}
-    if(!window.supabase || !window.GYM_CLOUD || !window.GYM_CLOUD.url || !window.GYM_CLOUD.key){say('同步服务暂未连接；当前仍自动保存到本机，可导出备份。');return;}
-    try{client=window.supabase.createClient(window.GYM_CLOUD.url,window.GYM_CLOUD.key);}catch(error){say('同步服务加载失败；本机记录仍可使用。');return;}
-    send.disabled=false;email.disabled=false;
-    function connected(session){
-      var next=session&&session.user;
-      if((user&&user.id)!==(next&&next.id))epoch++;
-      user=next||null;form.hidden=!!user;logout.hidden=!user;manual.disabled=!user;
-      account.textContent=user?'已登录：'+user.email:'';
-      if(user){say('已登录，正在连接你的记录…');window.setTimeout(sync,0);}
-      else say('尚未登录：重量保存在本机。手机和电脑登录同一个邮箱后自动同步。');
-    }
-    async function sync(){
-      if(!user)return;
-      if(busy){rerun=true;return;}
-      if(!navigator.onLine){say('当前离线：记录已保存在本机，联网后自动补传。');return;}
-      var owner=read(ownerKey);
-      if(owner&&owner!==user.id){say('此浏览器已有另一个账号的记录。为避免混合，请退出并登录原账号，或在另一个浏览器使用新账号。');return;}
-      write(ownerKey,user.id);
-      busy=true;var generation=epoch,currentUser=user.id;
-      function current(){return generation===epoch&&user&&user.id===currentUser;}
-      say('正在同步日期和重量…');
-      try{
-        history.flush();var cloud=[],offset=0;
-        while(true){
-          var result=await client.from('weight_entries').select('id,exercise,kg,date,time,at').eq('user_id',currentUser).order('at',{ascending:true}).order('id',{ascending:true}).range(offset,offset+999);
-          if(!current())return;
-          if(result.error)throw result.error;
-          cloud=cloud.concat(result.data);if(result.data.length<1000)break;offset+=1000;
-        }
-        var ids=new Set(cloud.map(function(e){return e.id;}));
-        var missing=history.getEntries().filter(function(e){return !ids.has(e.id);});
-        for(var start=0;start<missing.length;start+=100){
-          if(!current())return;
-          var batch=missing.slice(start,start+100).map(function(e){return {user_id:currentUser,id:e.id,exercise:e.exercise,kg:e.kg,date:e.date,time:e.time,at:e.at};});
-          var uploaded=await client.from('weight_entries').upsert(batch,{onConflict:'user_id,id',ignoreDuplicates:true});
-          if(!current())return;if(uploaded.error)throw uploaded.error;
-        }
-        history.flush();history.merge(cloud);
-        say('已同步 · '+new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+' · '+history.getEntries().length+' 条重量记录，仅此账号可见。');
-      }catch(error){if(current())say('同步暂未成功，本机记录已保留。请检查网络后点“立即同步”。'+(error&&error.message?' '+error.message:''));}
-      finally{busy=false;if(rerun){rerun=false;window.clearTimeout(timer);timer=window.setTimeout(sync,1500);}}
-    }
-    history.subscribe(function(){if(user&&!busy){window.clearTimeout(timer);timer=window.setTimeout(sync,1500);}else if(user)rerun=true;});
-    form.addEventListener('submit',function(event){event.preventDefault();if(!send.disabled)send.click();});
-    send.addEventListener('click',async function(){
-      if(!email.reportValidity()||!email.value.trim())return;
-      send.disabled=true;say('正在发送登录链接…');
-      try{
-        var result=await client.auth.signInWithOtp({email:email.value.trim(),options:{shouldCreateUser:true,emailRedirectTo:new URL('./',window.location.href).href}});
-        if(result.error)throw result.error;
-        say('登录链接已发送。请在这台设备打开邮箱，点邮件里的登录链接返回本页。手机和电脑使用同一个邮箱。');
-        window.setTimeout(function(){send.disabled=false;},60000);
-      }catch(error){send.disabled=false;say('登录邮件发送失败：'+error.message);}
-    });
-    logout.addEventListener('click',async function(){
-      epoch++;user=null;window.clearTimeout(timer);
-      try{await client.auth.signOut({scope:'local'});}catch(error){/* Local logout must remain available offline. */}
-      connected(null);say('已退出同步账号。本机仍保留已有记录；请勿在共用设备上保存私人记录。');
-    });
-    manual.addEventListener('click',sync);
-    client.auth.onAuthStateChange(function(event,session){window.setTimeout(function(){connected(session);},0);});
-    client.auth.getSession().then(function(result){if(result.error)throw result.error;connected(result.data.session);}).catch(function(){say('登录状态读取失败，请刷新页面；本机记录仍可使用。');});
-    window.addEventListener('online',sync);window.addEventListener('focus',sync);
-    document.addEventListener('visibilitychange',function(){if(!document.hidden)sync();});
-    window.setInterval(function(){if(!document.hidden)sync();},30000);
   }
 
     function initFlexibleSchedule(read, write, localDay) {
@@ -332,28 +279,26 @@
     document.getElementById('cycleToday').addEventListener('click',function(){chooseDay(localDay());});
     function rollover(){var today=localDay();if(today!==shownDay){if(selectedDay===shownDay){selectedDay=today;week=monday(today);editing=false;selectedPlan=state.next;}shownDay=today;render();}}
     window.addEventListener('focus',rollover);document.addEventListener('visibilitychange',function(){if(!document.hidden)rollover();});window.setInterval(rollover,30000);render();
-    return {canImport:function(){return !locked;},importSessions:function(incoming){if(locked)throw Error('Schedule unreadable');remember();incoming.forEach(function(s){state.sessions=state.sessions.filter(function(old){return old.date!==s.date;});state.sessions.push({date:s.date,plan:s.plan,at:s.date+'T00:00:00.000Z',completed:s.completed.slice(),skipped:Object.assign({},s.skipped)});state.busy=state.busy.filter(function(d){return d!==s.date;});});recalculate(state.next);save();selectedPlan=state.next;editing=false;render();}};
+    return {refresh:function(){
+      try{var saved=JSON.parse(read(key)||'{"version":1,"next":"a","sessions":[],"busy":[]}');
+        if(saved.version!==1||!Object.prototype.hasOwnProperty.call(plans,saved.next)||!Array.isArray(saved.sessions)||!Array.isArray(saved.busy)||!saved.sessions.every(function(s){return s&&validDate(s.date)&&Object.prototype.hasOwnProperty.call(plans,s.plan)&&typeof s.at==='string'&&!isNaN(Date.parse(s.at));})||!saved.busy.every(validDate))throw Error('Invalid schedule');
+        function comparable(value){return JSON.stringify({next:value.next,sessions:value.sessions.slice().sort(function(a,b){return a.date.localeCompare(b.date);}).map(function(s){return {date:s.date,plan:s.plan,at:s.at,completed:s.completed||[],skipped:s.skipped||{}};}),busy:value.busy.slice().sort()});}
+        if(comparable(state)!==comparable(saved))lastState=null;
+        state=saved;locked=false;if(!editing)selectedPlan=state.next;render();
+      }catch(error){locked=true;render();}
+    },canImport:function(){return !locked;},importSessions:function(incoming){if(locked)throw Error('Schedule unreadable');remember();incoming.forEach(function(s){state.sessions=state.sessions.filter(function(old){return old.date!==s.date;});state.sessions.push({date:s.date,plan:s.plan,at:s.date+'T00:00:00.000Z',completed:s.completed.slice(),skipped:Object.assign({},s.skipped)});state.busy=state.busy.filter(function(d){return d!==s.date;});});recalculate(state.next);save();selectedPlan=state.next;editing=false;render();}};
   }
 
   // Keep native <details> working independently of script and storage.
   var status = document.getElementById('storageStatus');
-  var memory = Object.create(null);
-  var volatile = false;
   function storageMessage() {
-    status.textContent = volatile
-      ? '当前无法保存到浏览器；本页可继续打卡和填写重量，关闭或刷新后临时记录会丢失。'
-      : document.getElementById('syncStatus') ? '本机记录自动保存。手机与电脑的同步状态见下方；清理网站数据前请导出备份。' : '记录自动保存在当前浏览器。更换浏览器、网页地址或清理网站数据后，记录不会同步。';
+    status.textContent=accountStore.isVolatile()?'当前只能临时记录，刷新前请导出备份。':account.user?'本机自动保存，联网后同步到当前账号。共用设备用完请退出。':'游客记录仅保存在当前浏览器。登录后可选择导入；清理网站数据前请导出备份。';
   }
-  function read(key) {
-    if (Object.prototype.hasOwnProperty.call(memory, key)) return memory[key];
-    try { var value = window.localStorage.getItem(key); memory[key] = value; return value; }
-    catch (error) { volatile = true; storageMessage(); return null; }
-  }
-  function write(key, value) {
-    memory[key] = value;
-    try { window.localStorage.setItem(key, value); }
-    catch (error) { volatile = true; storageMessage(); }
-  }
+  function read(key){return accountStore.get(key);}
+  function write(key,value){accountStore.set(key,value);storageMessage();}
+  function refreshSettings(){settingInputs.forEach(function(input){var value=read('gym-compatible.setting.'+input.dataset.setting)||'';if(document.activeElement!==input)input.value=value;document.querySelectorAll('[data-setting-value="'+input.dataset.setting+'"]').forEach(function(dd){dd.textContent=value||'待记录';});});}
+  settingInputs.forEach(function(input){input.addEventListener('input',function(){write('gym-compatible.setting.'+this.dataset.setting,this.value);refreshSettings();});});
+  refreshSettings();
   function localDay() {
     var now = new Date();
     return now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2);
@@ -381,7 +326,7 @@
   for (var j = 0; j < loads.length; j++) {
     loads[j].disabled = false;
     var storedWeight = read('gym-compatible.load.' + loads[j].getAttribute('data-key'));
-    loads[j].value = storedWeight === null ? (loads[j].getAttribute('data-default-weight') || '') : storedWeight;
+    loads[j].value = storedWeight === null ? '' : storedWeight;
     loads[j].addEventListener('input', function () {
       var value = this.value;
       if (!this.validity.valid) {
@@ -402,15 +347,24 @@
     });
   }
   var historyApi=initWeightHistory(read, write, loads, localDay);
-  if(document.getElementById('syncStatus'))initCloudSync(historyApi,read,write);
-  // Probe write access separately. Read failures must never prevent timer setup.
-  try { window.localStorage.setItem('__gym_test', '1'); window.localStorage.removeItem('__gym_test'); }
-  catch (error) { volatile = true; }
   storageMessage();
 
   var scheduleApi=initFlexibleSchedule(read, write, localDay);
   initPersonalImport(historyApi,scheduleApi,read,write,localDay);
   window.addEventListener('gym-checkins-imported',updateDay);
+  function refreshAccountViews(){
+    historyApi.refreshFromStore();
+    updateDay();scheduleApi.refresh();refreshSettings();
+    loads.forEach(function(input){if(document.activeElement!==input){var value=read('gym-compatible.load.'+input.dataset.key);input.value=value===null?'':value;}});
+    storageMessage();
+  }
+  account.attach({history:historyApi,refresh:refreshAccountViews});
+  var storageRefreshTimer=null;
+  window.addEventListener('storage',function(event){
+    if(event.key && event.key.indexOf('gym-account.v2|'+accountStore.scope+'|')!==0)return;
+    window.clearTimeout(storageRefreshTimer);
+    storageRefreshTimer=window.setTimeout(function(){if(account.isCurrent()){accountStore.refreshFromStorage();refreshAccountViews();}},80);
+  });
 
   // TIMER_ADJUSTMENT_V2_START
   var segments = [
@@ -490,5 +444,4 @@
   render();
   document.getElementById('runtimeStatus').textContent = '交互已启用：点器械图片或名称可展开／收起；打卡、重量与爬坡计时可用。';
   document.getElementById('runtimeStatus').className = 'runtime-ready';
-})();
-
+})().catch(function(){var status=document.getElementById('runtimeStatus');if(status)status.textContent='记录组件暂未加载，请刷新重试；下方器械图文仍可直接展开阅读。';});

@@ -25,6 +25,9 @@ async function main() {
     const context = await browser.newContext({ viewport: { width:390,height:844 }, hasTouch:true, isMobile:true, javaScriptEnabled:false });
     const page = await context.newPage();
     await page.goto(`http://127.0.0.1:${server.address().port}`);
+    // This context intentionally disables scripts: the public read-only fallback
+    // retains its example settings. A fresh interactive guest must start blank,
+    // which interactions.cjs verifies after the account initializer is ready.
     assert.equal(await page.locator('.machine-profile').count(), 15, 'every training card shows its separate profile');
     assert.match(await page.locator('#mon-row .fixed-settings').innerText(), /前后调节.*10.*高度.*9/s);
     assert.match(await page.locator('#wed-legpress .fixed-settings').innerText(), /调节档位.*5/s);
