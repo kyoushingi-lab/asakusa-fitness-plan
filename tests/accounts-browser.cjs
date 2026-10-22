@@ -78,7 +78,7 @@ function training(date, plan) { return { date, plan, at: date + 'T01:00:00Z', co
 function weight(uid, id, exercise, kg) { return { user_id: uid, id, exercise, kg, date: '2020-01-06', time: '10:00', at: '2020-01-06T01:00:00Z' }; }
 let browser, server, origin;
 const contexts = new Set();
-async function device(db, initialUid = null) {
+async function device(db, initialUid = null, configuration = {}) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, timezoneId: 'Asia/Tokyo' });
   contexts.add(context);
   await context.route('**/*', route => {
@@ -90,7 +90,7 @@ async function device(db, initialUid = null) {
       localStorage.setItem(key, JSON.stringify(initial)); localStorage.setItem('__fitness_accounts_test.initialized', 'yes');
     }
   }, { key: SESSION, initial: session(initialUid) });
-  await context.route('**/cloud-config.js*', route => route.fulfill({ contentType: 'application/javascript', body: 'window.GYM_CLOUD=' + JSON.stringify({ url: API, key: 'synthetic-public-key' }) + ';' }));
+  await context.route('**/cloud-config.js*', route => route.fulfill({ contentType: 'application/javascript', body: 'window.GYM_CLOUD=' + JSON.stringify({ url: API, key: 'synthetic-public-key', emailLoginPaused: false, ...configuration }) + ';' }));
   await context.route('**/vendor/supabase.js*', route => route.fulfill({ contentType: 'application/javascript', body: '(' + mockSDK.toString() + ')();' }));
   await context.route(API + '/**', async route => {
     const request = route.request(), url = new URL(request.url()), token = (request.headers().authorization || '').replace(/^Bearer /, '');
@@ -147,7 +147,10 @@ async function completed(page, date, plan) {
   await page.waitForFunction(({ date, plan }) => Array.from(document.querySelectorAll('#cycleLog li')).some(row => row.textContent.includes(date) && row.textContent.includes(plan.toUpperCase())), { date, plan });
 }
 async function synced(page) { await page.waitForFunction(() => document.querySelector('#syncStatus').textContent.startsWith('已同步')); }
-async function sync(page) { await page.locator('#syncNow').click(); await synced(page); }
+async function accountOptions(page) {
+  if (!await page.locator('#accountOptions').evaluate(element => element.open)) await page.locator('#accountOptionsLabel').click();
+}
+async function sync(page) { await accountOptions(page); await page.locator('#syncNow').click(); await synced(page); }
 async function guest(page) {
   await page.waitForFunction(() => document.querySelector('#syncLogout').hidden && /游客/.test(document.querySelector('#accountMode').textContent));
 }
@@ -161,7 +164,7 @@ async function login(page, uid, withEvent = true) {
   else { await page.evaluate(({ key, next }) => localStorage.setItem(key, JSON.stringify(next)), { key: SESSION, next: session(uid) }); await page.reload(); }
   await loggedIn(page, uid);
 }
-async function logout(page) { await page.locator('#syncLogout').click(); await guest(page); }
+async function logout(page) { await accountOptions(page); await page.locator('#syncLogout').click(); await guest(page); }
 async function scenario(name, fn) { await fn(); console.log('PASS ' + name); }
 (async () => {
   server = http.createServer((request, response) => {
@@ -178,7 +181,7 @@ async function scenario(name, fn) { await fn(); console.log('PASS ' + name); }
     await d.page.locator('#guestContinue').click();
     await d.page.locator('#mon-row input.load').fill('17.5'); await d.page.locator('#mon-row input.load').blur();
     await inputSetting(d.page, 'row.fore_aft', '10');
-    await d.page.locator('#syncEmail').fill(email(A)); await d.page.locator('#syncSend').click();
+    await accountOptions(d.page); await d.page.locator('#syncEmail').fill(email(A)); await d.page.locator('#syncSend').click();
     const auth = await d.page.evaluate(() => window.__fitnessAccountsAuth.requests);
     assert.equal(auth.anonymous, 0); assert.equal(auth.createUser, 0); assert.equal(auth.email.length, 1);
     assert.equal(auth.email[0].email, email(A)); assert.equal(db.calls.length, 0); await d.close();
@@ -234,7 +237,9 @@ async function scenario(name, fn) { await fn(); console.log('PASS ' + name); }
     await expose(d.page.locator('#importGuest'));
     await d.page.locator('#importGuest').waitFor({ state: 'visible' });
     await d.page.waitForFunction(() => !document.querySelector('#importGuest').disabled);
+    const importedReload = d.page.waitForEvent('framenavigated', { predicate: frame => frame === d.page.mainFrame() });
     await d.page.locator('#importGuest').click();
+    await importedReload; await d.page.waitForFunction(() => document.querySelector('#runtimeStatus').classList.contains('runtime-ready')); await synced(d.page);
     await d.page.waitForFunction(() => document.querySelector('#historyRows').textContent.includes('17.5'));
     assert.match(await d.page.locator('#cycleLog').textContent(), /2020-01-06.*C/);
     assert.match(await d.page.locator('#cycleLog').textContent(), /2020-01-08.*B/);
@@ -254,7 +259,9 @@ async function scenario(name, fn) { await fn(); console.log('PASS ' + name); }
     // The import must first pull these rows; a local timestamp must not replace them.
     db.state.push(state(A, 'calendar', '2020-01-06', { session: training('2020-01-06', 'c'), busy: false }, 200), state(A, 'setting', 'row.fore_aft', '8', 200));
     await expose(d.page.locator('#importGuest'));
+    const importedReload = d.page.waitForEvent('framenavigated', { predicate: frame => frame === d.page.mainFrame() });
     await d.page.locator('#importGuest').click();
+    await importedReload; await d.page.waitForFunction(() => document.querySelector('#runtimeStatus').classList.contains('runtime-ready'));
     await d.page.waitForFunction(() => document.querySelector('#historyRows').textContent.includes('17.5'));
     await synced(d.page);
     assert.match(await d.page.locator('#cycleLog').textContent(), /2020-01-06.*C/);
@@ -306,7 +313,29 @@ async function scenario(name, fn) { await fn(); console.log('PASS ' + name); }
     await d.page.locator('#cycleRestore').click();
     assert.match(await d.page.locator('#cycleLog').textContent(), /2020-01-06.*A/); await d.close();
   });
-  console.log(engine + ': 8 account browser scenarios passed (synthetic fixtures, mocked SDK Auth and database).');
+  await scenario('paused email hides login while guests retain local history and existing accounts can still sync', async () => {
+    const db = database(), d = await device(db, null, { emailLoginPaused: true }); await guest(d.page);
+    assert.equal(await d.page.locator('#accountOptions').evaluate(element => element.open), false);
+    assert.equal(await d.page.locator('#syncLogin').isVisible(), false); assert.equal(await d.page.locator('#guestContinue').isVisible(), true);
+    await d.page.locator('#guestContinue').click();
+    await d.page.locator('#mon-row input.load').fill('11.25'); await d.page.locator('#mon-row input.load').blur();
+    await accountOptions(d.page);
+    assert.equal(await d.page.locator('#syncLogin').isVisible(), false); assert.equal(await d.page.locator('#syncSend').isDisabled(), true);
+    assert.match(await d.page.locator('#accountOptionsLabel').textContent(), /邮箱登录暂缓/);
+    assert.equal(await d.page.locator('#historyRows tr').count(), 1); assert.equal(db.calls.length, 0);
+    assert.equal(await d.page.evaluate(() => window.__fitnessAccountsAuth.requests.email.length), 0);
+    await d.page.reload(); await guest(d.page);
+    await d.page.waitForFunction(() => document.querySelector('#runtimeStatus').classList.contains('runtime-ready'));
+    assert.equal(await d.page.locator('#mon-row input.load').inputValue(), '11.25');
+    assert.equal(await d.page.locator('#historyRows tr').count(), 1); assert.equal(await d.page.locator('#syncLogin').isVisible(), false);
+    assert.equal(await d.page.evaluate(() => window.__fitnessAccountsAuth.requests.email.length), 0); await d.close();
+    const existing = await device(db, A, { emailLoginPaused: true }); await loggedIn(existing.page, A);
+    await existing.page.locator('#mon-row input.load').fill('25'); await sync(existing.page);
+    assert.equal(db.weights.filter(row => row.user_id === A).length, 1);
+    assert.equal(await existing.page.locator('#syncLogin').isVisible(), false);
+    assert.equal(await existing.page.evaluate(() => window.__fitnessAccountsAuth.requests.email.length), 0); await existing.close();
+  });
+  console.log(engine + ': 9 account browser scenarios passed (synthetic fixtures, mocked SDK Auth and database).');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   for (const context of contexts) await context.close(); if (browser) await browser.close(); if (server) server.close();
 });

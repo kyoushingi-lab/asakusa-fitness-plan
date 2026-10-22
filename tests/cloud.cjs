@@ -23,7 +23,7 @@ function owner(request) {
   try { return JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).sub || null; } catch { return null; }
 }
 function privateWeights(id = A) { return records.filter(row => row.user_id === id); }
-async function device(id = A) {
+async function device(id = A, configuration = {}) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, timezoneId: 'Asia/Tokyo' });
   contexts.add(context);
   await context.route('**/*', route => {
@@ -33,7 +33,7 @@ async function device(id = A) {
   if (id) await context.addInitScript(({ key, initial }) => {
     if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(initial));
   }, { key: AUTH_KEY, initial: session(id) });
-  await context.route('**/cloud-config.js*', route => route.fulfill({ contentType: 'application/javascript', body: 'window.GYM_CLOUD=' + JSON.stringify({ url: API, key: 'test-public-key' }) + ';' }));
+  await context.route('**/cloud-config.js*', route => route.fulfill({ contentType: 'application/javascript', body: 'window.GYM_CLOUD=' + JSON.stringify({ url: API, key: 'test-public-key', emailLoginPaused: false, ...configuration }) + ';' }));
   await context.route(API + '/**', async route => {
     const request = route.request(), url = new URL(request.url()), uid = owner(request);
     requests.push({ uid, method: request.method(), path: url.pathname });
@@ -89,7 +89,8 @@ async function synced(page, count) {
     return status.startsWith('已同步') && (expected === null || status.includes(expected + ' 条'));
   }, count === undefined ? null : count);
 }
-async function sync(page, count) { await page.locator('#syncNow').click(); await synced(page, count); }
+async function accountOptions(page) { if (!await page.locator('#accountOptions').evaluate(element => element.open)) await page.locator('#accountOptionsLabel').click(); }
+async function sync(page, count) { await accountOptions(page); await page.locator('#syncNow').click(); await synced(page, count); }
 async function expose(locator) { await locator.evaluate(element => { let parent = element.parentElement; while (parent) { if (parent.tagName === 'DETAILS') parent.open = true; parent = parent.parentElement; } }); }
 (async () => {
   fs.mkdirSync(path.join(__dirname, '../test-results'), { recursive: true });
@@ -102,7 +103,7 @@ async function expose(locator) { await locator.evaluate(element => { let parent 
   browser = await playwright[engine].launch();
   const guest = await device(null);
   await guest.p.waitForFunction(() => /游客/.test(document.querySelector('#syncStatus').textContent));
-  await guest.p.locator('#syncEmail').fill('fitness@example.test');
+  await accountOptions(guest.p); await guest.p.locator('#syncEmail').fill('fitness@example.test');
   const requestEvent = guest.p.waitForRequest(request => request.url().includes('/auth/v1/otp'));
   await guest.p.locator('#syncSend').click(); const loginRequest = await requestEvent;
   assert.equal(loginRequest.postDataJSON().email, 'fitness@example.test');
@@ -118,7 +119,7 @@ async function expose(locator) { await locator.evaluate(element => { let parent 
   assert.equal(await b.p.locator('#historyRows tr').count(), 1); assert.equal(await b.p.locator('#fri-row input.load').inputValue(), '17.5');
   console.log('PASS same-account second device downloads dated history and latest load');
 
-  await b.c.setOffline(true); await b.p.locator('#mon-row input.load').fill('20'); await b.p.locator('#syncNow').click();
+  await b.c.setOffline(true); await b.p.locator('#mon-row input.load').fill('20'); await accountOptions(b.p); await b.p.locator('#syncNow').click();
   assert.match(await b.p.locator('#syncStatus').textContent(), /离线/); assert.equal(privateWeights().length, 1);
   await b.c.setOffline(false); await synced(b.p, 2); await sync(a.p, 2);
   assert.equal(await a.p.locator('#historyRows tr').count(), 2); assert.equal(await a.p.locator('#mon-row input.load').inputValue(), '20');
@@ -128,7 +129,7 @@ async function expose(locator) { await locator.evaluate(element => { let parent 
   assert.equal(await a.p.locator('#mon-row input.load').inputValue(), ''); assert.equal(await b.p.locator('#mon-row input.load').inputValue(), '');
   assert.equal(privateWeights().length, 2); console.log('PASS repeated sync neither duplicates records nor restores intentionally cleared weight');
 
-  fail = true; await a.p.locator('#mon-chest input.load').fill('15'); await a.p.locator('#syncNow').click();
+  fail = true; await a.p.locator('#mon-chest input.load').fill('15'); await accountOptions(a.p); await a.p.locator('#syncNow').click();
   await a.p.waitForFunction(() => document.querySelector('#syncStatus').textContent.includes('本机记录已保留'));
   assert.equal(await a.p.locator('#historyRows tr').count(), 3);
   fail = false; await sync(a.p, 3); assert.equal(privateWeights().length, 3);
@@ -155,9 +156,24 @@ async function expose(locator) { await locator.evaluate(element => { let parent 
   assert.ok(requests.some(request => request.uid === B && request.path.startsWith('/rest/v1/')));
   console.log('PASS switching accounts starts with private blank data, safely uploads only its own weights, and preserves the original account');
 
+  const mailBefore = requests.filter(request => request.path === '/auth/v1/otp').length;
+  const paused = await device(null, { emailLoginPaused: true });
+  assert.equal(await paused.p.locator('#accountOptions').evaluate(element => element.open), false);
+  assert.equal(await paused.p.locator('#syncLogin').isVisible(), false); await paused.p.locator('#guestContinue').click();
+  await paused.p.locator('#mon-row input.load').fill('11.25'); await paused.p.locator('#mon-row input.load').blur();
+  await accountOptions(paused.p);
+  assert.equal(await paused.p.locator('#syncLogin').isVisible(), false); assert.equal(await paused.p.locator('#syncSend').isDisabled(), true);
+  await paused.p.reload(); await paused.p.waitForFunction(() => document.querySelector('#runtimeStatus').classList.contains('runtime-ready'));
+  assert.equal(await paused.p.locator('#mon-row input.load').inputValue(), '11.25'); assert.equal(await paused.p.locator('#historyRows tr').count(), 1);
+  assert.equal(requests.filter(request => request.path === '/auth/v1/otp').length, mailBefore); await paused.close();
+  const pausedSession = await device(A, { emailLoginPaused: true }); await synced(pausedSession.p, 4); await sync(pausedSession.p, 4);
+  assert.equal(await pausedSession.p.locator('#syncLogin').isVisible(), false); assert.equal(await pausedSession.p.locator('#historyRows tr').count(), 4);
+  assert.equal(requests.filter(request => request.path === '/auth/v1/otp').length, mailBefore); await pausedSession.close();
+  console.log('PASS paused email hides the form, preserves guest history across reload, makes no OTP request and keeps existing sessions syncing');
+
   await expose(b.p.locator('#syncNow')); await b.p.locator('#sync').scrollIntoViewIfNeeded();
   await b.p.screenshot({ path: path.join(__dirname, '../test-results/sync-' + engine + '.png') });
-  await a.close(); await b.close(); console.log(engine + ': 7 cloud integration scenarios passed (simulated server, real vendored SDK).');
+  await a.close(); await b.close(); console.log(engine + ': 8 cloud integration scenarios passed (simulated server, real vendored SDK).');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   for (const context of contexts) await context.close(); if (browser) await browser.close(); if (server) server.close();
 });

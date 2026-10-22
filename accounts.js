@@ -21,6 +21,7 @@
       } catch(error){status('暂时无法连接账号服务，可以先使用游客模式。');}
     }
     if(observed)user=observedUser;initializing=false;
+    var emailPaused=!client || config.emailLoginPaused===true;
     if(!root.GymAccountStore)throw Error('Account storage unavailable');
     var store=root.GymAccountStore.create({scope:user?'user:'+user.id:'guest',seedSettings:options.seedSettings});
     function importing(){
@@ -42,12 +43,14 @@
     text('accountMode',user?'已登录 · 独立账号':'游客模式 · 仅保存在这台设备');
     text('accountName',user?(user.email||'我的账号'):'无需注册，直接开始训练');
     text('syncAccount',user?'当前账号：'+(user.email||'已登录'):'游客记录不会自动上传；登录后可自行选择导入。');
-    if(form)form.hidden=!!user;
+    if(form)form.hidden=!!user||emailPaused;
+    text('accountOptionsLabel',user?'查看同步状态 / 退出账号':emailPaused?'账号与同步 · 邮箱登录暂缓':'邮箱登录 / 账号同步');
+    text('emailPausedNote',emailPaused?'邮箱登录暂缓配置。你可以直接训练，记录会自动保存在当前浏览器。':'登录后可在手机和电脑之间同步；游客记录需要手动选择导入。');
     if(logout)logout.hidden=!user;
     if(manual)manual.disabled=!user;
     var guest=document.getElementById('guestContinue');
-    if(guest){guest.hidden=!!user;guest.disabled=false;guest.addEventListener('click',function(){text('accountMode','游客模式 · 已启用');document.getElementById('cycle').scrollIntoView({behavior:'smooth',block:'start'});});}
-    if(client && form){
+    if(guest){guest.hidden=!!user;guest.disabled=false;guest.addEventListener('click',function(){text('accountMode','游客模式 · 已启用');var panel=document.getElementById('cyclePanel');if(panel)panel.open=true;document.getElementById('cycle').scrollIntoView({behavior:'smooth',block:'start'});});}
+    if(client && form && !emailPaused){
       email.disabled=false;document.getElementById('syncSend').disabled=false;
       form.addEventListener('submit',async function(event){
         event.preventDefault();if(!form.reportValidity())return;

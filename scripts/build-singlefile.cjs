@@ -4,7 +4,7 @@ const root=path.resolve(__dirname,'..'),out=path.resolve(process.argv[2]||path.j
 let html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 html=html.replace(/<link rel="stylesheet" href="styles\.css(?:\?[^"]*)?">/,'<style>'+fs.readFileSync(path.join(root,'styles.css'),'utf8')+'</style>');
 html=html.replace(/(?:src|href)="(assets\/[^"]+\.jpg)"/g,(all,file)=>all.replace(file,'data:image/jpeg;base64,'+fs.readFileSync(path.join(root,file)).toString('base64')));
-html=html.replace(/<script[^>]*src="(?:vendor\/supabase\.js|cloud-config\.js)"[^>]*><\/script>/g,'');
+html=html.replace(/<script[^>]*src="(?:vendor\/supabase\.js|cloud-config\.js)(?:\?[^"]*)?"[^>]*><\/script>/g,'');
 ['account-store.js','account-sync.js','accounts.js','app.js'].forEach(file=>{
   const tag=new RegExp('<script[^>]*src="'+file.replace('.','\\.')+'(?:\\?[^\"]*)?"[^>]*><\\/script>');
   html=html.replace(tag,()=>'<script>'+fs.readFileSync(path.join(root,file),'utf8').replace(/<\/script/gi,'<\\/script')+'</script>');
