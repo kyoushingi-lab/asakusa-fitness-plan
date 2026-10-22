@@ -44,7 +44,7 @@ GitHub Pages 使用 `main` 分支的根目录。更新这些文件并提交到 `
 
 ## 器械档案与计时
 
-器械详情分别展示固定档位和上次记录重量。臀部机已确认 Hammer Strength Select Hip & Glute（HS-HG）；用户已确认 Life Fitness Insignia Series Abdominal（SS-AB）整机图与现场腹肌机外观一致。腹肌机主图和放大图使用该型号厂家参考图，高度调节特写只放在默认收起的调节相册里。其余未确认的整机图明确标为参考机型。10张调节位置实拍使用原生 details，关闭脚本仍可展开。
+器械详情分别展示固定档位和上次记录重量。已确认臀部机 Hammer Strength Select Hip & Glute（HS-HG），已核对腹肌机 Life Fitness Insignia SS-AB 与髋外展机 Hammer Strength Select Hip Abduction（HS-HAB）的整机外观。所有卡片保留主图，删除重复的整机放大图、“怎么认”和通用型号说明。10张调节位置实拍仍用默认收起的原生 details，关闭脚本可展开；腹肌机高度特写只在调节相册中。
 
 训练循环与日历默认收起，摘要保留下一次训练项目。爬坡计时放大坡度与速度，每段之间增加10秒调参，30分钟训练加4次间歇共30分40秒，暂停、继续和后台时间校正保留。
 

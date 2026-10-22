@@ -31,12 +31,12 @@ async function main() {
     assert.doesNotMatch(await page.locator('#wed-legpress .fixed-settings').innerText(), /kg|公斤|重量/);
     assert.equal(await page.locator('#wed-legpress [data-last-weight="legpress"]').innerText(), '待记录');
     assert.match(await page.locator('#wed-glute .model-status').innerText(), /已确认.*HS-HG/s);
+    assert.equal(await page.locator('.photo-viewer,.identify-tip').count(),0,'duplicate enlargement and identification modules are removed from every card');
     for(const id of ['mon-abs','wed-abs']) {
       const card=page.locator('#'+id);
       assert.equal(await card.locator('.equipment-thumb').getAttribute('src'),'assets/abs-insignia.jpg','whole-machine photo is the main thumbnail');
-      assert.equal(await card.locator('.photo-viewer img').getAttribute('src'),'assets/abs-insignia.jpg','enlargement shows the same whole machine');
+      assert.equal(await card.locator('.equipment-thumb').evaluate(i=>i.complete&&i.naturalWidth===1000),true,'whole-machine photo loads directly on the card');
       assert.match(await card.locator('.model-status').innerText(), /Life Fitness.*SS-AB/s);
-      assert.match(await card.locator('.photo-viewer figcaption').textContent(), /厂家.*非.*实拍/s);
       const closeups=card.locator('img[src="assets/settings/abdominal-height-4.jpg"]');
       assert.equal(await closeups.count(),1,'height-4 detail appears once, only in adjustment gallery');
       assert.equal(await card.locator('.setting-photos img[src="assets/settings/abdominal-height-4.jpg"]').count(),1);
@@ -45,12 +45,11 @@ async function main() {
       assert.equal(await closeups.isVisible(),true);
       assert.equal(await closeups.evaluate(i=>i.complete&&i.naturalWidth>600),true);
       await card.locator('.setting-photos > summary').tap();
-      await card.locator('.photo-viewer > summary').tap();
-      assert.equal(await card.locator('.photo-viewer img').evaluate(i=>i.complete&&i.naturalWidth===1000),true);
-      await card.locator('.photo-viewer > summary').tap();
     }
     assert.equal(await page.locator('.machine img[src="assets/abs.jpg"]').count(),0,'wrong abs whole-machine photo is removed');
-    assert.match(await page.locator('#mon-pulldown .model-status').innerText(), /参考机型.*尚未确认/s);
+    assert.equal(await page.locator('#mon-pulldown .model-status').count(),0,'repetitive generic model paragraph is removed');
+    assert.match(await page.locator('#mon-pulldown .equipment-image-label').innerText(), /参考机型/,'unconfirmed photo keeps a concise reference badge');
+    assert.doesNotMatch(await page.locator('body').innerText(), /整机图用于辨认训练类型，尚未确认浅草店具体型号/);
     assert.equal(await page.locator('.setting-photos[open]').count(),0,'setting photos start collapsed');
     const gallery = page.locator('#wed-legcurl .setting-photos');
     await gallery.locator('summary').tap();
@@ -62,7 +61,7 @@ async function main() {
     assert.equal(await page.locator('.machine-profile [data-last-date]').count(),15);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'profile fits a 390px mobile screen');
     await context.close();
-    console.log(`PASS ${engine} equipment profiles: A/B SS-AB whole-machine photos, height closeup only in collapsed gallery, 15 separate profiles, native photo expansion without JavaScript and mobile width`);
+    console.log(`PASS ${engine} equipment profiles: A/B SS-AB main photos, height closeup only in collapsed gallery, no duplicate enlargement/identification modules, concise model labels, native adjustment viewing without JavaScript and mobile width`);
   } finally { if (browser) await browser.close(); await new Promise(resolve=>server.close(resolve)); }
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

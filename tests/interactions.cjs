@@ -118,16 +118,17 @@ async function main() {
     assert.doesNotMatch(await text(p,'body'),/周一｜|周三｜|周五｜/);
     await p.locator('#mon-pulldown summary.machine-summary').tap();await p.locator('#mon-pulldown summary.machine-summary').tap();assert.equal(await p.locator('#mon-pulldown .machine-details').isVisible(),true);
   },{javaScriptEnabled:false});
-  await test('all 15 cards show real embedded photos and native photo enlargement works', async p => {
+  await test('all 15 cards show main equipment photos and native adjustment galleries work', async p => {
     await open(p); assert.equal(await p.locator('.machine-picture img').count(),15);
     const images = await p.locator('.machine-picture img').evaluateAll(imgs => imgs.map(i=>({src:i.src,loaded:i.complete&&i.naturalWidth>=600,alt:i.alt})));
     assert.ok(images.every(i=>i.loaded && (i.src.startsWith('data:image/')||i.src.startsWith(origin+'/assets/')) && i.alt.length>5));
     assert.equal(new Set(images.map(i=>i.src)).size,9);
-    for (const card of await p.locator('details.machine').all()) {
-      const viewer=card.locator('.photo-viewer');assert.equal(await viewer.evaluate(e=>e.open),false);
-      await viewer.locator('summary').tap();assert.equal(await viewer.locator('img').isVisible(),true);
-      assert.ok(await viewer.locator('img').evaluate(i=>i.complete&&i.naturalWidth>=600));
-      await viewer.locator('summary').tap();assert.equal(await viewer.locator('img').isVisible(),false);
+    assert.equal(await p.locator('.photo-viewer,.identify-tip').count(),0);
+    for (const gallery of await p.locator('details.machine .setting-photos').all()) {
+      assert.equal(await gallery.evaluate(e=>e.open),false);
+      await gallery.locator('summary').tap();assert.equal(await gallery.locator('img').first().isVisible(),true);
+      await p.waitForFunction(el=>Array.from(el.querySelectorAll('img')).every(i=>i.complete&&i.naturalWidth>=600),await gallery.elementHandle());
+      await gallery.locator('summary').tap();assert.equal(await gallery.locator('img').first().isVisible(),false);
     }
   });
   await test('the ten remaining workout cards open their correct manufacturer videos', async (p,c) => {
@@ -136,12 +137,14 @@ async function main() {
     const cases=[['mon-pulldown','NAIEnMjN-6w'],['fri-pulldown','NAIEnMjN-6w'],['mon-abs','o_0WrejFbAw'],['wed-abs','o_0WrejFbAw'],['wed-legpress','yyla8aCTMWo'],['fri-abductor','H98IP8rARy4'],['wed-glute','7nazTC6EshM'],['fri-glute','7nazTC6EshM'],['wed-legcurl','SiwJ_T62l9c'],['wed-abductor','H98IP8rARy4']];
     for(const [id,videoId] of cases){const [tab]=await Promise.all([p.waitForEvent('popup'),p.locator('#'+id+' a.video-link').tap()]);await tab.waitForLoadState('domcontentloaded');assert.equal(tab.url(),'https://www.youtube.com/watch?v='+videoId);await tab.close();}
   });
-  await test('photos and native enlargement remain available in script-disabled offline files', async p => {
+  await test('main photos and native adjustment galleries remain available in script-disabled offline files', async p => {
     await p.goto(require('node:url').pathToFileURL(file).href);
     assert.equal(await p.locator('.machine-picture img').count(),15);
-    await p.locator('#wed-glute .photo-viewer summary').tap();
-    assert.equal(await p.locator('#wed-glute .photo-viewer img').isVisible(),true);
-    assert.ok(await p.locator('#wed-glute .photo-viewer img').evaluate(i=>i.complete&&i.naturalWidth>=600));
+    assert.equal(await p.locator('.photo-viewer,.identify-tip').count(),0);
+    assert.ok(await p.locator('#wed-glute .equipment-thumb').evaluate(i=>i.complete&&i.naturalWidth>=600));
+    await p.locator('#wed-glute .setting-photos summary').tap();
+    assert.equal(await p.locator('#wed-glute .setting-photos img').isVisible(),true);
+    assert.ok(await p.locator('#wed-glute .setting-photos img').evaluate(i=>i.complete&&i.naturalWidth>=600));
   },{javaScriptEnabled:false});
   await test('confirmed equipment settings appear on every matching training day without inventing row weight', async p => {
     await open(p);

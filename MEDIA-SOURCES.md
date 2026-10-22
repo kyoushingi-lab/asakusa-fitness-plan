@@ -18,6 +18,6 @@
 
 厂家图片的形状、颜色和调节结构可能与门店器械不同。请结合中文名、日文名、机身标识和网页中的辨认要点找机器。
 
-`assets/settings/` 的10张照片由用户提供，为浅草店器械调节位置实拍，未经图像变形。腹肌机高度特写只放在调节相册，主图与放大图均使用 `assets/abs-insignia.jpg` 的厂家整机图。用户已确认该整机图与现场外观一致；厂家产品页对应型号为 SS-AB。
+`assets/settings/` 的10张照片由用户提供，为浅草店器械调节位置实拍，未经图像变形。腹肌机高度特写只放在调节相册，主图使用 `assets/abs-insignia.jpg` 的厂家整机图。用户已确认该整机图与现场外观一致；厂家产品页对应型号为 SS-AB。所有器械已移除重复的整机放大模块和辨认说明，调节相册仍保留。
 
-用户已确认臀部机是 Hammer Strength Select Hip & Glute（HS-HG），并确认腹肌机厂家整机图与现场外观一致。其他机型不因厂家图片而被视为已确认。
+用户已确认臀部机 Hammer Strength Select Hip & Glute（HS-HG），并确认腹肌机 SS-AB、髋外展机 Hammer Strength Select Hip Abduction 整机图与现场外观一致。髋外展机厂家产品页标注 SKU HS-HAB。其他机型不因厂家图片而被视为已确认。
