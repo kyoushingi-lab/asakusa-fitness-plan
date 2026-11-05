@@ -18,6 +18,18 @@
 
 厂家图片的形状、颜色和调节结构可能与门店器械不同。请结合中文名、日文名、机身标识和网页中的辨认要点找机器。
 
-`assets/settings/` 的10张照片由用户提供，为浅草店器械调节位置实拍，未经图像变形。腹肌机高度特写只放在调节相册，主图使用 `assets/abs-insignia.jpg` 的厂家整机图。用户已确认该整机图与现场外观一致；厂家产品页对应型号为 SS-AB。所有器械已移除重复的整机放大模块和辨认说明，调节相册仍保留。
+当前调节相册中的10张照片由用户提供，为浅草店器械调节位置实拍。腹肌机高度特写只放在调节相册，主图使用 `assets/abs-insignia.jpg` 的厂家整机图。用户已确认该整机图与现场外观一致；厂家产品页对应型号为 SS-AB。所有器械已移除重复的整机放大模块和辨认说明，调节相册仍保留。
 
 用户已确认臀部机 Hammer Strength Select Hip & Glute（HS-HG），并确认腹肌机 SS-AB、髋外展机 Hammer Strength Select Hip Abduction 整机图与现场外观一致。髋外展机厂家产品页标注 SKU HS-HAB。其他机型不因厂家图片而被视为已确认。
+
+## 2026-11-05 设置照片更正
+
+用户重新标注并确认：胸推机为座位7、调节D；三头肌机为座位2。此更正针对调节档位和照片归属，不把胸推的7.5kg历史改为三头肌重量。
+
+| 当前资产 | 照片内容 | 原始文件 |
+| --- | --- | --- |
+| `assets/settings/chest-press-seat-7.jpg` | 胸推机 · 座位7 | `52db2c6377d3b4cef51aa24d3a28357c.jpg` |
+| `assets/settings/chest-press-adjustment-d.jpg` | 胸推机 · 调节D | `bb122cb6b505f2555f04f3b498ee5e6a.jpg` |
+| `assets/settings/triceps-seat-2.jpg` | 三头肌机 · 座位2 | `df490776319d6824163ed93ac2d91f15.jpg` |
+
+三张新资产仅为网页加载做等比例缩放（高1280px）、JPEG质量86压缩，并剥离EXIF；未裁切、重绘或修改文字与器械内容。旧的 `chest-press-seat-2.jpg`、`triceps-seat-7.jpg`、`triceps-adjustment-d.jpg` 已从页面移除，仓库内旧文件保留备查，不再用于当前设置相册。

@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path');
 const root=path.resolve(__dirname,'..'),out=path.resolve(process.argv[2]||path.join(root,'../outputs/浅草健身计划_修复版.html'));
 let html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+html=html.replace(/<link rel="manifest"[^>]*>/,'');
 html=html.replace(/<link rel="stylesheet" href="styles\.css(?:\?[^"]*)?">/,'<style>'+fs.readFileSync(path.join(root,'styles.css'),'utf8')+'</style>');
 html=html.replace(/(?:src|href)="(assets\/[^"]+\.jpg)"/g,(all,file)=>all.replace(file,'data:image/jpeg;base64,'+fs.readFileSync(path.join(root,file)).toString('base64')));
 html=html.replace(/<script[^>]*src="(?:vendor\/supabase\.js|cloud-config\.js)(?:\?[^"]*)?"[^>]*><\/script>/g,'');

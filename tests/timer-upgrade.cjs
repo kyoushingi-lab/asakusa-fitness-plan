@@ -8,8 +8,8 @@ const root=path.resolve(process.argv[2]||path.join(__dirname,'..'));
 const engine=process.argv[3]||'chromium';
 const results=[];
 let browser,server,origin;
-async function test(name,body){
-  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,timezoneId:'Asia/Tokyo'});
+async function test(name,body,contextOptions={}){
+  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,timezoneId:'Asia/Tokyo',...contextOptions});
   const page=await context.newPage();page.setDefaultTimeout(1500);
   try{await page.clock.install({time:new Date('2020-10-21T12:00:00+09:00')});await page.goto(origin);await body(page);results.push({name,pass:true});console.log('PASS '+name);}
   catch(error){results.push({name,pass:false,error:error.message});console.log('FAIL '+name+' — '+error.message.split('\n')[0]);}
@@ -71,6 +71,69 @@ async function main(){
     await page.clock.setSystemTime(new Date(started+1860000));await page.evaluate(()=>window.dispatchEvent(new Event('pageshow')));
     assert.match(await txt(page,'#timerLabel'),/完成/);assert.equal(await txt(page,'#clock'),'00:00');
   });
+  await test('focus mode keeps the same running timer and restores scroll and focus on return',async page=>{
+    await page.locator('#play').tap();await page.clock.fastForward(1000);
+    await page.locator('#timerFocus').scrollIntoViewIfNeeded();await page.locator('#timerFocus').focus();
+    const scroll=await page.evaluate(()=>({x:scrollX,y:scrollY})),theme=await page.locator('meta[name="theme-color"]').getAttribute('content');await page.locator('#timerFocus').tap();
+    assert.equal(await page.locator('body').evaluate(el=>el.classList.contains('timer-focus-active')),true);
+    assert.equal(await page.locator('.timer-box').evaluate(el=>el.classList.contains('is-focus')),true);
+    assert.equal(await page.locator('#clock').count(),1);assert.match(await txt(page,'#play'),/暂停/);
+    assert.equal(await page.locator('meta[name="theme-color"]').getAttribute('content'),'#203c32');
+    await page.clock.fastForward(5000);assert.equal(await txt(page,'#clock'),'05:54');
+    await page.locator('#timerFocusClose').tap();assert.equal(await page.locator('body').evaluate(el=>el.classList.contains('timer-focus-active')),false);
+    assert.equal(await page.evaluate(()=>document.activeElement.id),'timerFocus');
+    assert.equal(await page.locator('meta[name="theme-color"]').getAttribute('content'),theme);
+    assert.ok(await page.evaluate(before=>Math.abs(scrollY-before.y)<=1&&Math.abs(scrollX-before.x)<=1,scroll));
+    await page.clock.fastForward(1000);assert.equal(await txt(page,'#clock'),'05:53');
+  });
+  await test('focus mode preserves a paused adjustment interval and resumes its remaining seven seconds',async page=>{
+    await page.locator('#play').tap();await page.clock.fastForward(363000);await page.locator('#play').tap();assert.equal(await txt(page,'#clock'),'00:07');
+    await page.locator('#timerFocus').tap();await page.clock.fastForward(30000);assert.equal(await txt(page,'#clock'),'00:07');
+    assert.match(await txt(page,'#timerLabel'),/调整参数/);assert.equal(await txt(page,'#timerGrade'),'7');assert.match(await txt(page,'#totalClock'),/30:40/);
+    await page.locator('#timerFocusClose').tap();assert.equal(await txt(page,'#clock'),'00:07');
+    await page.locator('#play').tap();await page.clock.fastForward(7000);assert.equal(await txt(page,'#clock'),'06:00');assert.match(await txt(page,'#timerLabel'),/^第2\/5段/);
+  });
+  await test('focus layout fits phone browser heights and landscape with simulated safe areas',async page=>{
+    await page.locator('#timerFocus').tap();
+    await page.addStyleTag({content:'.timer-box.is-focus{--timer-safe-top:47px;--timer-safe-bottom:34px;--timer-safe-left:0px;--timer-safe-right:0px}'});
+    for(const [width,height]of [[402,874],[402,640],[874,402],[640,320],[320,568]]){
+      await page.setViewportSize({width,height});
+      await page.addStyleTag({content:'.timer-box.is-focus{--timer-safe-left:'+(width>height?'44px':'0px')+';--timer-safe-right:'+(width>height?'44px':'0px')+'}'});
+      if(process.env.TIMER_FOCUS_SCREENSHOTS==='1'&&width===402){
+        fs.mkdirSync(path.join(__dirname,'../test-results'),{recursive:true});
+        if(height===874){await page.locator('#play').tap();await page.clock.fastForward(24000);}
+        else if(height===640){await page.locator('#next').tap();await page.clock.fastForward(3000);}
+        await page.screenshot({path:path.join(__dirname,'../test-results/timer-focus-'+(height===640?'adjustment-':'')+width+'x'+height+'-'+engine+'.png'),fullPage:false});
+      }
+      const layout=await page.evaluate(()=>{
+        const box=document.querySelector('.timer-box'),rect=box.getBoundingClientRect(),style=getComputedStyle(box);
+        return {x:rect.x,y:rect.y,width:rect.width,height:rect.height,scroll:box.scrollHeight,client:box.clientHeight,paddingTop:parseFloat(style.paddingTop),paddingBottom:parseFloat(style.paddingBottom),bodyPosition:getComputedStyle(document.body).position};
+      });
+      assert.ok(Math.abs(layout.x)<=1&&Math.abs(layout.y)<=1&&Math.abs(layout.width-width)<=1&&Math.abs(layout.height-height)<=1,JSON.stringify({width,height,layout}));
+      assert.ok(layout.paddingTop>=47&&layout.paddingBottom>=34,'safe-area padding');assert.equal(layout.bodyPosition,'fixed');
+      assert.ok(layout.scroll<=layout.client+1,'focus content overflows at '+width+'×'+height);
+      for(const selector of ['#timerFocusClose','#timerLabel','.timer-parameters','#clock','#totalClock','#play','#next','#reset']){
+        const bounds=await page.locator(selector).boundingBox();assert.ok(bounds&&bounds.x>=-1&&bounds.y>=-1&&bounds.x+bounds.width<=width+1&&bounds.y+bounds.height<=height+1,selector+' outside '+width+'×'+height);
+      }
+    }
+  });
+  await test('focus mode traps keyboard navigation and Escape returns to its entry button',async page=>{
+    await page.locator('#timerFocus').focus();await page.keyboard.press('Enter');assert.equal(await page.evaluate(()=>document.activeElement.id),'timerFocusClose');
+    assert.equal(await page.locator('.timer-box').getAttribute('aria-modal'),'true');
+    await page.keyboard.press('Shift+Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'reset');
+    await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'timerFocusClose');
+    await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'play');
+    await page.keyboard.press('Enter');await page.clock.fastForward(1840000);assert.equal(await page.locator('#play').isDisabled(),true);assert.equal(await page.locator('#next').isDisabled(),true);
+    await page.locator('#timerFocusClose').focus();await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'reset');
+    await page.keyboard.press('Shift+Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'timerFocusClose');
+    await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.id),'timerFocus');assert.equal(await txt(page,'#clock'),'00:00');
+    assert.notEqual(await page.locator('.timer-box').getAttribute('aria-modal'),'true');
+  });
+  await test('script-disabled previews keep focus controls disabled and the original timer readable',async page=>{
+    assert.equal(await page.locator('#timerFocus').isDisabled(),true);assert.equal(await page.locator('#timerFocusClose').isVisible(),false);
+    assert.equal(await txt(page,'#clock'),'06:00');assert.equal(await page.locator('#play').isDisabled(),true);
+    assert.equal(await page.locator('body').evaluate(el=>el.classList.contains('timer-focus-active')),false);
+  },{javaScriptEnabled:false});
 }
 main().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{
   if(browser)await browser.close();if(server)server.close();

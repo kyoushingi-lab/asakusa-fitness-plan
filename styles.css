@@ -64,6 +64,70 @@ button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible{o
 @media(max-width:360px){.timer-box{padding:14px}.timer-parameters{gap:8px}.timer-parameters>div{padding:10px}.timer-parameters em{font-size:14px}}
 /* TIMER_ADJUSTMENT_V2_END */
 
+/* One existing timer expands to the browser's usable viewport. */
+#timerFocus{width:100%;min-height:52px;padding:12px 18px;border:1px solid #356e55;border-radius:12px;background:#e6f3ea;color:#24543f;font-size:18px;font-weight:750;cursor:pointer;touch-action:manipulation}
+.timer-focus-toolbar{display:none}
+body.timer-focus-active{position:fixed;width:100%;height:100%;overflow:hidden;overscroll-behavior:none;background:#203c32;padding-bottom:0}
+.timer-box.is-focus{
+  --timer-safe-top:env(safe-area-inset-top,0px);--timer-safe-bottom:env(safe-area-inset-bottom,0px);--timer-safe-left:env(safe-area-inset-left,0px);--timer-safe-right:env(safe-area-inset-right,0px);
+  position:fixed;inset:0;z-index:10000;width:100%;height:100vh;height:100dvh;max-width:none;margin:0;border:0;border-radius:0;
+  padding:calc(16px + var(--timer-safe-top)) calc(18px + var(--timer-safe-right)) calc(16px + var(--timer-safe-bottom)) calc(18px + var(--timer-safe-left));
+  display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) minmax(0,1.3fr) auto auto auto;
+  gap:clamp(8px,1.6vh,16px);overflow:hidden;overscroll-behavior:contain;touch-action:manipulation;background:#203c32;color:#fff;
+}
+.timer-box.is-focus.is-adjusting{background:#203c32}
+.timer-box.is-focus .timer-focus-toolbar{grid-row:1;display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:44px;color:#c4dfcf;font-size:14px}
+.timer-box.is-focus #timerFocusClose{min-height:44px;padding:8px 13px;border:1px solid #ffffff55;border-radius:9px;background:#ffffff12;color:#fff;font:inherit;font-size:15px;font-weight:700;cursor:pointer;touch-action:manipulation}
+.timer-box.is-focus #timerLabel{grid-row:2;margin:0;font-size:clamp(18px,5vw,24px);line-height:1.4;text-align:center}
+.timer-box.is-focus .timer-parameters{grid-row:3;align-self:stretch;align-items:stretch;gap:12px;min-height:0;margin:0}
+.timer-box.is-focus .timer-parameters>div{display:flex;flex-direction:column;justify-content:center;min-height:0;padding:10px 14px;text-align:center}
+.timer-box.is-focus .timer-parameters>div>span{font-size:17px;line-height:1.3}
+.timer-box.is-focus .timer-parameters strong{justify-content:center;line-height:1.05;gap:6px}
+.timer-box.is-focus .timer-parameters b{font-size:clamp(44px,min(18vw,11dvh),90px)}
+.timer-box.is-focus .timer-parameters em{font-size:17px}
+.timer-box.is-focus #clock{grid-row:4;display:flex;align-items:center;justify-content:center;min-height:0;margin:0;font-size:clamp(80px,min(32vw,22dvh),180px);line-height:1;letter-spacing:-.035em;white-space:nowrap;text-align:center}
+.timer-box.is-focus #totalClock{grid-row:5;margin:0;font-size:14px;line-height:1.45;text-align:center}
+.timer-box.is-focus #timerHint{grid-row:6;margin:0;font-size:15px;line-height:1.4;text-align:center;color:#c4dfcf}
+.timer-box.is-focus .controls{grid-row:7;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0}
+.timer-box.is-focus .controls #play{grid-column:1/-1}
+.timer-box.is-focus .controls button{min-width:0;min-height:56px;padding:10px 12px;font-size:19px;line-height:1.25;border-radius:12px}
+.timer-box.is-focus .noscript-info{display:none}
+#timerFocus:focus-visible,.timer-box.is-focus button:focus-visible{outline:3px solid #f1cf83;outline-offset:3px}
+@media(max-height:700px){
+  .timer-box.is-focus{padding:calc(12px + var(--timer-safe-top)) calc(16px + var(--timer-safe-right)) calc(12px + var(--timer-safe-bottom)) calc(16px + var(--timer-safe-left));grid-template-rows:auto auto minmax(0,1fr) minmax(0,1.15fr) auto auto;gap:8px}
+  .timer-box.is-focus #timerLabel{font-size:18px;line-height:1.3}
+  .timer-box.is-focus .timer-parameters>div{padding:6px 10px}
+  .timer-box.is-focus .timer-parameters b{font-size:clamp(40px,min(16vw,10dvh),64px)}
+  .timer-box.is-focus #clock{font-size:clamp(76px,min(29vw,18dvh),126px)}
+  .timer-box.is-focus #timerHint{display:none}
+  .timer-box.is-focus .controls{grid-row:6;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .timer-box.is-focus .controls #play{grid-column:auto}
+  .timer-box.is-focus .controls button{min-height:56px;padding:8px;font-size:16px}
+}
+@media(max-height:600px){
+  .timer-box.is-focus{padding-top:calc(8px + var(--timer-safe-top));padding-bottom:calc(8px + var(--timer-safe-bottom));gap:6px}
+  .timer-box.is-focus #timerLabel{font-size:16px;line-height:1.25}
+  .timer-box.is-focus .timer-parameters>div{padding:4px 8px}
+  .timer-box.is-focus .timer-parameters>div>span{font-size:14px}
+  .timer-box.is-focus .timer-parameters b{font-size:clamp(38px,min(15vw,10dvh),56px)}
+  .timer-box.is-focus #clock{font-size:clamp(72px,min(28vw,16dvh),110px)}
+  .timer-box.is-focus #totalClock{font-size:12px;line-height:1.35}
+  .timer-box.is-focus .controls button{font-size:15px;padding:8px 6px}
+}
+@media(orientation:landscape) and (max-height:500px){
+  .timer-box.is-focus{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;column-gap:20px;row-gap:6px}
+  .timer-box.is-focus .timer-focus-toolbar{grid-column:1/-1;grid-row:1}
+  .timer-box.is-focus #timerLabel{grid-column:1/-1;grid-row:2;font-size:17px}
+  .timer-box.is-focus #clock{grid-column:1;grid-row:3;font-size:clamp(60px,min(13vw,25dvh),130px)}
+  .timer-box.is-focus .timer-parameters{grid-column:2;grid-row:3;gap:8px}
+  .timer-box.is-focus .timer-parameters>div{padding:4px 8px}
+  .timer-box.is-focus .timer-parameters b{font-size:clamp(36px,min(7vw,16dvh),70px)}
+  .timer-box.is-focus .timer-parameters>div>span,.timer-box.is-focus .timer-parameters em{font-size:13px}
+  .timer-box.is-focus #totalClock{grid-column:1;grid-row:4;align-self:center;font-size:12px}
+  .timer-box.is-focus .controls{grid-column:2;grid-row:4;gap:6px}
+  .timer-box.is-focus .controls button{min-height:52px;padding:6px;font-size:15px}
+}
+
 
 /* Personal equipment profiles; all text and native photo viewers work without scripts. */
 .machine-profile{margin:0 0 1rem;padding:1rem;border:1px solid var(--line,#d2e0d6);border-radius:15px;background:#f3f8f3}
@@ -85,3 +149,8 @@ button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible{o
 /* Training stays immediately available while email setup is deferred. */
 .guest-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:1rem 0}.guest-actions #guestContinue{min-height:52px;padding:12px 22px;font-size:18px;font-weight:750;background:#356e55;color:#fff;border:1px solid #356e55}.guest-actions a{font-size:15px;font-weight:600;color:#356e55}.account-options{border-top:1px solid #d2e0d6;margin-top:1rem;padding-top:.2rem}.account-options>summary{min-height:48px;padding:.8rem 0;cursor:pointer;font-size:14px;color:#5b7169}.account-options>summary::marker{color:#789989}
 @media(max-width:420px){.guest-actions #guestContinue{width:100%}.guest-actions{gap:12px}.guest-actions a{padding:4px 0}}
+
+.setting-correction{margin:0 0 14px;padding:0 14px;border:1px solid #cbded2;border-radius:12px;background:#eef6f0;font-size:14px}
+.setting-correction>summary{padding:12px 0;min-height:48px;font-weight:700;cursor:pointer;color:#285b45}
+.setting-correction p{margin:0 0 12px;line-height:1.65}.setting-correction button{min-height:48px;padding:10px 14px;border:1px solid #356e55;border-radius:9px;color:#fff;background:#356e55;font-weight:700;margin-bottom:12px}
+.home-screen-help{margin:12px 0;color:var(--sub);font-size:13px}.home-screen-help>summary{min-height:44px;padding:10px 0;cursor:pointer;font-weight:700;color:#356e55}.home-screen-help p{margin:0 0 9px;line-height:1.7}

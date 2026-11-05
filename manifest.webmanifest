@@ -1,0 +1,11 @@
+{
+  "id": "./",
+  "name": "浅草健身记录",
+  "short_name": "浅草健身",
+  "lang": "zh-CN",
+  "start_url": "./#cardio",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#203c32",
+  "theme_color": "#203c32"
+}

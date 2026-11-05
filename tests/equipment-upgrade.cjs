@@ -29,6 +29,31 @@ async function main() {
     // retains its example settings. A fresh interactive guest must start blank,
     // which interactions.cjs verifies after the account initializer is ready.
     assert.equal(await page.locator('.machine-profile').count(), 15, 'every training card shows its separate profile');
+    for(const id of ['mon-chest','fri-chest']) {
+      const card=page.locator('#'+id);
+      assert.match(await card.locator('.fixed-settings').innerText(),/座位\s*7[\s\S]*调节档位\s*D/,'chest settings use the corrected seat 7 and D labels');
+      assert.deepEqual(await card.locator('.setting-photos img').evaluateAll(images=>images.map(i=>i.getAttribute('src'))),['assets/settings/chest-press-seat-7.jpg','assets/settings/chest-press-adjustment-d.jpg']);
+      assert.match(await card.locator('.setting-photos').textContent(),/2 张[\s\S]*胸推机 · 座位 7[\s\S]*胸推机 · 调节 D/);
+      const correctedGallery=card.locator('.setting-photos');
+      assert.equal(await correctedGallery.evaluate(el=>el.open),false);
+      await correctedGallery.locator('summary').tap();
+      await page.waitForFunction(el=>Array.from(el.querySelectorAll('img')).every(i=>i.complete&&i.naturalWidth>=960),await correctedGallery.elementHandle());
+      await correctedGallery.locator('summary').tap();
+      assert.equal(await card.locator('input.load').getAttribute('data-key'),'chest','chest weight history stays bound to chest');
+      assert.equal(await card.locator('input.load').getAttribute('data-default-weight'),'7.5','existing chest default is not reassigned to another exercise');
+    }
+    const triceps=page.locator('#mon-triceps');
+    assert.deepEqual(await triceps.locator('.fixed-settings dd').allTextContents(),['2'],'triceps only retains the corrected seat 2');
+    assert.equal(await triceps.locator('.setting-photos img').getAttribute('src'),'assets/settings/triceps-seat-2.jpg');
+    assert.match(await triceps.locator('.setting-photos').textContent(),/1 张[\s\S]*三头肌机 · 座位 2/);
+    await triceps.locator('.setting-photos summary').tap();
+    await page.waitForFunction(el=>el.complete&&el.naturalWidth>=960,await triceps.locator('.setting-photos img').elementHandle());
+    await triceps.locator('.setting-photos summary').tap();
+    assert.equal(await triceps.locator('input.load').getAttribute('data-key'),'triceps');
+    assert.equal(await triceps.locator('input.load').getAttribute('data-default-weight'),null,'chest default must not move to triceps');
+    for(const file of ['chest-press-seat-2.jpg','triceps-seat-7.jpg','triceps-adjustment-d.jpg']) {
+      assert.equal(await page.locator('.machine [src="assets/settings/'+file+'"],.machine [href="assets/settings/'+file+'"]').count(),0,'outdated mislabeled photos are absent from the page');
+    }
     assert.match(await page.locator('#mon-row .fixed-settings').innerText(), /前后调节.*10.*高度.*9/s);
     assert.match(await page.locator('#wed-legpress .fixed-settings').innerText(), /调节档位.*5/s);
     assert.doesNotMatch(await page.locator('#wed-legpress .fixed-settings').innerText(), /kg|公斤|重量/);
@@ -64,7 +89,7 @@ async function main() {
     assert.equal(await page.locator('.machine-profile [data-last-date]').count(),15);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'profile fits a 390px mobile screen');
     await context.close();
-    console.log(`PASS ${engine} equipment profiles: A/B SS-AB main photos, height closeup only in collapsed gallery, no duplicate enlargement/identification modules, concise model labels, native adjustment viewing without JavaScript and mobile width`);
+    console.log(`PASS ${engine} equipment profiles: corrected chest 7/D and triceps 2 photos/settings, chest weight binding preserved, A/B SS-AB main photos, native adjustment viewing without JavaScript and mobile width`);
   } finally { if (browser) await browser.close(); await new Promise(resolve=>server.close(resolve)); }
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

@@ -8,7 +8,7 @@
     "test:chromium": "node tests/interactions.cjs index.html chromium && node tests/accounts-browser.cjs chromium && node tests/cloud.cjs chromium",
     "test:accounts": "node tests/account-store.cjs && node tests/account-sync.cjs",
     "build:offline": "node scripts/build-singlefile.cjs",
-    "test:upgrades": "node tests/personal-upgrade.cjs webkit && node tests/timer-upgrade.cjs . webkit && node tests/equipment-upgrade.cjs webkit"
+    "test:upgrades": "node tests/personal-upgrade.cjs webkit && node tests/timer-upgrade.cjs . webkit && node tests/equipment-upgrade.cjs webkit && node tests/photo-correction.cjs webkit"
   },
   "devDependencies": {
     "playwright": "1.62.1"

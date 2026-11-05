@@ -166,13 +166,14 @@ async function main() {
       assert.match(settings, /上次训练重量（kg）[\s\S]*待记录/);
       assert.equal(await p.locator('#'+id+' input.load').inputValue(),'');
     }
-    assert.match(await text(p,'#mon-triceps .machine-profile'), /座位\s*7[\s\S]*调节档位\s*D/);
+    assert.match(await text(p,'#mon-triceps .machine-profile'), /座位\s*7/);
+    assert.equal(await p.evaluate(()=>localStorage.getItem('gym-account.v2|guest|gym-compatible.setting.triceps.adjustment')),'D','old private values remain untouched until the user applies the photo correction');
     assert.equal(await p.locator('#mon-triceps input.load').inputValue(),'');
     assert.equal(await p.evaluate(()=>localStorage.getItem('gym-account.v2|guest|gym-compatible.setting.row.fore_aft')),'10');
   });
   await test('new guest starts without owner chest defaults and preserves saved or intentionally cleared weights', async p => {
     await open(p); assert.equal(await p.locator('#mon-chest input.load').inputValue(),'');
-    assert.equal(await p.locator('#mon-chest .fixed-settings dd').innerText(),'待记录');
+    assert.equal(await p.locator('#mon-chest .fixed-settings dd').first().innerText(),'待记录');
     assert.ok((await p.locator('.fixed-settings dd').allTextContents()).every(value=>value==='待记录'),'new guests do not inherit the owner settings shown in static fallback content');
     await p.locator('#mon-chest input.load').fill('15'); await reload(p);
     assert.equal(await p.locator('#fri-chest input.load').inputValue(),'15');

@@ -1,13 +1,14 @@
 
 (async function () {
   'use strict';
-  var fields={pulldown:['position'],row:['fore_aft','height'],chest:['seat'],triceps:['seat','adjustment'],abs:['height'],glute:['position'],legpress:['position'],legcurl:['roller','start'],abductor:['position']};
+  var fields={pulldown:['position'],row:['fore_aft','height'],chest:['seat','adjustment'],triceps:['seat'],abs:['height'],glute:['position'],legpress:['position'],legcurl:['roller','start'],abductor:['position']};
   var seedSettings={},settingInputs=[];
   document.querySelectorAll('[data-machine-profile]').forEach(function(profile,index){
     var machine=profile.dataset.machineProfile,box=profile.querySelector('.fixed-settings');
     var editor=document.createElement('details');editor.className='setting-editor';
     var summary=document.createElement('summary');summary.textContent='修改我的设置';editor.appendChild(summary);
     box.querySelectorAll('dl>div').forEach(function(row,position){
+      if(!fields[machine]||!fields[machine][position])return;
       var key=machine+'.'+fields[machine][position],dd=row.querySelector('dd'),value=dd.textContent.trim();
       if(value!=='待记录')seedSettings['gym-compatible.setting.'+key]=value;
       dd.dataset.settingValue=key;
@@ -299,6 +300,18 @@
   function refreshSettings(){settingInputs.forEach(function(input){var value=read('gym-compatible.setting.'+input.dataset.setting)||'';if(document.activeElement!==input)input.value=value;document.querySelectorAll('[data-setting-value="'+input.dataset.setting+'"]').forEach(function(dd){dd.textContent=value||'待记录';});});}
   settingInputs.forEach(function(input){input.addEventListener('input',function(){write('gym-compatible.setting.'+this.dataset.setting,this.value);refreshSettings();});});
   refreshSettings();
+  var correctionButton=document.getElementById('applySettingCorrection');
+  if(correctionButton){
+    correctionButton.disabled=false;
+    correctionButton.addEventListener('click',function(){
+      write('gym-compatible.setting.chest.seat','7');
+      write('gym-compatible.setting.chest.adjustment','D');
+      write('gym-compatible.setting.triceps.seat','2');
+      if(read('gym-compatible.setting.triceps.adjustment')==='D')write('gym-compatible.setting.triceps.adjustment','');
+      refreshSettings();
+      document.getElementById('settingCorrectionStatus').textContent='已按新照片保存：胸推7 / D，三头肌2。重量、日期和打卡未改动。';
+    });
+  }
   function localDay() {
     var now = new Date();
     return now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2);
@@ -389,6 +402,75 @@
   var reset = document.getElementById('reset');
   var timerLabel = document.getElementById('timerLabel');
   var timerBox = timerLabel.closest('.timer-box');
+  var timerFocusButton = document.getElementById('timerFocus');
+  var timerFocusClose = document.getElementById('timerFocusClose');
+  var focusSnapshot = null;
+  function focusElement(element) {
+    if (!element || !element.focus) return;
+    try { element.focus({ preventScroll: true }); } catch (error) { element.focus(); }
+  }
+  function enterTimerFocus() {
+    if (focusSnapshot || !timerFocusClose) return;
+    var theme = document.querySelector('meta[name="theme-color"]');
+    focusSnapshot = {
+      x: window.scrollX, y: window.scrollY, active: timerFocusButton,
+      top: document.body.style.top, left: document.body.style.left,
+      role: timerBox.getAttribute('role'), modal: timerBox.getAttribute('aria-modal'), label: timerBox.getAttribute('aria-label'),
+      theme: theme, color: theme ? theme.getAttribute('content') : null, siblings: []
+    };
+    document.body.style.top = -focusSnapshot.y + 'px';
+    document.body.style.left = -focusSnapshot.x + 'px';
+    document.body.classList.add('timer-focus-active');
+    timerBox.classList.add('is-focus');
+    timerBox.setAttribute('role', 'dialog');timerBox.setAttribute('aria-modal', 'true');timerBox.setAttribute('aria-label', '专注爬坡计时');
+    timerFocusButton.setAttribute('aria-expanded', 'true');
+    if (theme) theme.setAttribute('content', '#203c32');
+    // Keep the existing timer in place; only the surrounding page becomes inert.
+    for (var node = timerBox; node && node !== document.body; node = node.parentElement) {
+      var parent = node.parentElement;
+      if (!parent) break;
+      Array.prototype.forEach.call(parent.children, function (sibling) {
+        if (sibling === node || /^(SCRIPT|STYLE|LINK)$/.test(sibling.tagName)) return;
+        focusSnapshot.siblings.push({ node: sibling, inert: sibling.getAttribute('inert') });
+        sibling.setAttribute('inert', '');
+      });
+    }
+    tick();focusElement(timerFocusClose);
+  }
+  function leaveTimerFocus() {
+    if (!focusSnapshot) return;
+    var saved = focusSnapshot;focusSnapshot = null;
+    timerBox.classList.remove('is-focus');document.body.classList.remove('timer-focus-active');
+    document.body.style.top = saved.top;document.body.style.left = saved.left;
+    [['role', saved.role], ['aria-modal', saved.modal], ['aria-label', saved.label]].forEach(function (pair) { if (pair[1] === null) timerBox.removeAttribute(pair[0]); else timerBox.setAttribute(pair[0], pair[1]); });
+    saved.siblings.forEach(function (item) { if (item.inert === null) item.node.removeAttribute('inert'); else item.node.setAttribute('inert', item.inert); });
+    if (saved.theme) { if (saved.color === null) saved.theme.removeAttribute('content'); else saved.theme.setAttribute('content', saved.color); }
+    timerFocusButton.setAttribute('aria-expanded', 'false');
+    var smooth = document.documentElement.style.scrollBehavior;
+    document.documentElement.style.scrollBehavior = 'auto';
+    window.scrollTo(saved.x, saved.y);
+    focusElement(saved.active && saved.active !== document.body && saved.active.isConnected ? saved.active : timerFocusButton);
+    window.scrollTo(saved.x, saved.y);
+    document.documentElement.style.scrollBehavior = smooth;
+    tick();
+  }
+  if (timerFocusButton && timerFocusClose) {
+    timerFocusButton.disabled = false;timerFocusClose.disabled = false;
+    timerFocusButton.setAttribute('aria-haspopup', 'dialog');timerFocusButton.setAttribute('aria-expanded', 'false');
+    timerFocusButton.addEventListener('click', enterTimerFocus);
+    timerFocusClose.addEventListener('click', leaveTimerFocus);
+    document.addEventListener('keydown', function (event) {
+      if (!focusSnapshot) return;
+      if (event.key === 'Escape') { event.preventDefault();leaveTimerFocus();return; }
+      if (event.key !== 'Tab') return;
+      var buttons = Array.prototype.filter.call(timerBox.querySelectorAll('button'), function (button) { return !button.disabled && button.getClientRects().length; });
+      if (!buttons.length) return;
+      var first = buttons[0], last = buttons[buttons.length - 1], active = document.activeElement;
+      if (!timerBox.contains(active) || (event.shiftKey && active === first) || (!event.shiftKey && active === last)) {
+        event.preventDefault();focusElement(event.shiftKey ? last : first);
+      }
+    });
+  }
   function format(seconds) { return ('0' + Math.floor(seconds / 60)).slice(-2) + ':' + ('0' + (seconds % 60)).slice(-2); }
   function sample() { if (running) elapsed = Math.min(total, Math.max(0, total - (deadline - Date.now()))); }
   function stage() {
@@ -415,9 +497,9 @@
     document.getElementById('timerSpeed').textContent = String(item.speed);
     document.getElementById('clock').textContent = format(complete ? 0 : Math.ceil((current.end - elapsed) / 1000));
     document.getElementById('totalClock').textContent = '训练剩余 ' + format(exerciseRemaining()) + ' / 30:00 · 全程剩余 ' + format(Math.ceil((total - elapsed) / 1000)) + ' / 30:40';
-    document.getElementById('timerHint').textContent = complete ? '已完成30分钟训练；4次参数调整另计40秒。' : current.gap ? '先把跑步机调到上方参数。倒计时结束后开始下一段；调好后也可直接点下方按钮。' : '本段按上方坡度与速度训练；下一段前会留10秒调整参数。';
+    document.getElementById('timerHint').textContent = focusSnapshot ? complete ? '30分钟训练完成，调参另计40秒。' : current.gap ? '调整到上方参数，倒计时后自动开始。' : '每段之间留10秒调参 · 全程30:40。' : complete ? '已完成30分钟训练；4次参数调整另计40秒。' : current.gap ? '先把跑步机调到上方参数。倒计时结束后开始下一段；调好后也可直接点下方按钮。' : '本段按上方坡度与速度训练；下一段前会留10秒调整参数。';
     play.textContent = complete ? '已完成' : running ? '❚❚ 暂停' : elapsed > 0 ? '▶ 继续' : '▶ 开始';
-    next.textContent = current.gap && !complete ? '参数已调好，开始本段' : current.index === segments.length - 1 ? '结束训练' : '下一段';
+    next.textContent = current.gap && !complete ? focusSnapshot ? '调好，开始' : '参数已调好，开始本段' : current.index === segments.length - 1 ? '结束训练' : '下一段';
     play.disabled = complete;
     next.disabled = complete;
     reset.disabled = false;
