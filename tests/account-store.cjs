@@ -40,6 +40,27 @@ test('legacy migration runs once and does not recopy subsequently edited global 
   const storage=new MemoryStorage({[LOAD]:'7.5'}),first=create(storage);first.set(LOAD,'10');storage.setItem(LOAD,'99');
   assert.equal(create(storage).get(LOAD),'10');assert.equal(storage.getItem(LOAD),'99');
 });
+
+test('old HTML-seeded photo settings correct without global setting keys and preserve legacy loads',()=>{
+  const key=name=>'gym-compatible.setting.'+name;
+  const storage=new MemoryStorage({[LOAD]:'6.25'});
+  const seedSettings={[key('chest.seat')]:'2',[key('triceps.seat')]:'7',[key('triceps.adjustment')]:'D'};
+  create(storage,'guest',{seedSettings});
+  assert.equal(storage.getItem(key('chest.seat')),null,'old HTML defaults were seeded only into the scoped store');
+  const current=create(storage);
+  assert.equal(current.correctLegacyPhotoSettings(),true);
+  assert.equal(current.get(key('chest.seat')),'7');
+  assert.equal(current.get(key('chest.adjustment')),'D');
+  assert.equal(current.get(key('triceps.seat')),'2');
+  assert.equal(current.get(key('triceps.adjustment')),'');
+  assert.equal(current.get(LOAD),'6.25'); assert.equal(storage.getItem(LOAD),'6.25');
+  current.projectState(); assert.equal(current.get(key('chest.seat')),'7','tracked state retains the correction');
+  assert.ok(current.stateEntries().every(row=>!row.key.includes('photo-correction')),'review metadata is not sync state');
+  current.set(key('chest.seat'),'2'); current.set(key('triceps.seat'),'7'); current.set(key('triceps.adjustment'),'D');
+  const reopened=create(storage);
+  assert.equal(reopened.correctLegacyPhotoSettings(),false);
+  assert.equal(reopened.get(key('chest.seat')),'2','later edits are not repeatedly corrected');
+});
 test('scope is immutable so a deferred draft flush cannot write into a later account',()=>{
   const storage=new MemoryStorage(),a=create(storage,A),b=create(storage,B);const flush=()=>a.set(PENDING,JSON.stringify({chest:entry('pending')}));
   try{a.scope=B;}catch(error){}flush();assert.equal(a.scope,A);assert.equal(b.get(PENDING),null);assert.match(a.get(PENDING),/pending/);

@@ -22,6 +22,10 @@
 
 用户已确认臀部机 Hammer Strength Select Hip & Glute（HS-HG），并确认腹肌机 SS-AB、髋外展机 Hammer Strength Select Hip Abduction 整机图与现场外观一致。髋外展机厂家产品页标注 SKU HS-HAB。其他机型不因厂家图片而被视为已确认。
 
+## 2026-11-12 网站图标
+
+assets/icons/icon.svg 为本项目原创的薄荷色弧形连接哑铃，深绿色不透明底。scripts/generate-icons.cjs 生成16/32/48px页签图标、多帧ICO、180px Apple图标及192/512px可遮罩图标；未使用第三方图标素材。
+
 ## 2026-11-05 设置照片更正
 
 用户重新标注并确认：胸推机为座位7、调节D；三头肌机为座位2。此更正针对调节档位和照片归属，不把胸推的7.5kg历史改为三头肌重量。

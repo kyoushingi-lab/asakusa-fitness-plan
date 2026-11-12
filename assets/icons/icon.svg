@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>浅草健身</title>
+  <rect width="512" height="512" fill="#203c32"/>
+  <g fill="#d2f4db" transform="rotate(-32 256 256)">
+    <rect x="126" y="166" width="64" height="180" rx="28"/>
+    <rect x="322" y="166" width="64" height="180" rx="28"/>
+    <path d="M182 269h30c35 0 42-26 77-26h41" fill="none" stroke="#d2f4db" stroke-width="36" stroke-linecap="round"/>
+  </g>
+</svg>

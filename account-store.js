@@ -435,9 +435,45 @@
       result.changedKeys = Array.from(changed).sort(compareKeys);
       return result;
     }
+    // Run only for the active page's store, never when inspecting guest data.
+    // The old global source plus the complete preset identifies the misplaced
+    // photos. Independent accounts and later personal edits are left alone.
+    function correctLegacyPhotoSettings() {
+      var marker = prefix + '__photo-correction.2026-11-12';
+      if (readPhysical(marker) !== null) return false;
+      var owner = readPhysical(OWNER), destination = owner ? 'user:' + owner : 'guest';
+      var before = {}, keys = ['chest.seat','chest.adjustment','triceps.seat','triceps.adjustment'];
+      keys.forEach(function(key) { before[key] = get(SETTING + key); });
+      // Old releases also seeded settings from HTML when the legacy browser
+      // contained real records but no explicit global setting keys.
+      var legacyData = storageKeys().some(function(key) {
+        var value = readPhysical(key);
+        if (key === HISTORY) return !!(parseHistory(value) || []).length;
+        if (key === PENDING) return parsePending(value).length > 0;
+        if (key === ROTATION) { var data = parseRotation(value); return !!(data && (data.sessions.length || data.busy.length || data.next !== 'a')); }
+        return (key.indexOf(LOAD) === 0 && value !== null && value !== '') ||
+          key.indexOf(DONE) === 0 || key.indexOf(SETTING) === 0;
+      });
+      var sourceMatches = {'chest.seat':'2','chest.adjustment':'D','triceps.seat':'7','triceps.adjustment':'D'};
+      var original = scope === destination && legacyData && keys.every(function(key) {
+        var value = readPhysical(SETTING + key);
+        return value === null || value === sourceMatches[key] || (key === 'chest.adjustment' && value === '');
+      });
+      var unchanged = before['chest.seat'] === '2' && before['triceps.seat'] === '7' &&
+        before['triceps.adjustment'] === 'D' &&
+        (before['chest.adjustment'] === null || before['chest.adjustment'] === '' || before['chest.adjustment'] === 'D');
+      writePhysical(marker, JSON.stringify({corrected: original && unchanged, previous: before}));
+      if (!original || !unchanged) return false;
+      set(SETTING + 'chest.seat', '7');
+      set(SETTING + 'chest.adjustment', 'D');
+      set(SETTING + 'triceps.seat', '2');
+      set(SETTING + 'triceps.adjustment', '');
+      return true;
+    }
     var api = {
       get: get, set: set, stateEntries: stateEntries, mergeState: mergeState,
       projectState: projectState, refreshFromStorage: refreshFromStorage, withoutTracking: withoutTracking,
+      correctLegacyPhotoSettings: correctLegacyPhotoSettings,
       guestSummary: guestSummary, guestSnapshot: guestSnapshot, importGuest: importGuest,
       getScope: function () { return scope; }, isVolatile: function () { return volatile; },
       subscribe: function (listener) { if (typeof listener !== 'function') throw Error('Invalid subscriber'); listeners.push(listener); return function () { listeners = listeners.filter(function (fn) { return fn !== listener; }); }; }

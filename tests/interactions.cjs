@@ -159,15 +159,15 @@ async function main() {
       localStorage.setItem('legacy-settings-seeded','yes');
     });
     await open(p);
-    for (const id of ['mon-chest','fri-chest']) assert.match(await text(p, '#'+id+' .machine-profile'), /座位\s*2[\s\S]*待记录/);
+    for (const id of ['mon-chest','fri-chest']) assert.match(await text(p, '#'+id+' .machine-profile'), /座位\s*7[\s\S]*调节档位\s*D/);
     for (const id of ['mon-row','fri-row']) {
       const settings = await text(p, '#'+id+' .machine-profile');
       assert.match(settings, /前后调节\s*10[\s\S]*高度\s*第 9 格/);
       assert.match(settings, /上次训练重量（kg）[\s\S]*待记录/);
       assert.equal(await p.locator('#'+id+' input.load').inputValue(),'');
     }
-    assert.match(await text(p,'#mon-triceps .machine-profile'), /座位\s*7/);
-    assert.equal(await p.evaluate(()=>localStorage.getItem('gym-account.v2|guest|gym-compatible.setting.triceps.adjustment')),'D','old private values remain untouched until the user applies the photo correction');
+    assert.match(await text(p,'#mon-triceps .machine-profile'), /座位\s*2/);
+    assert.equal(await p.evaluate(()=>localStorage.getItem('gym-account.v2|guest|gym-compatible.setting.triceps.adjustment')),'','misplaced old triceps adjustment is cleared automatically for the original preset');
     assert.equal(await p.locator('#mon-triceps input.load').inputValue(),'');
     assert.equal(await p.evaluate(()=>localStorage.getItem('gym-account.v2|guest|gym-compatible.setting.row.fore_aft')),'10');
   });

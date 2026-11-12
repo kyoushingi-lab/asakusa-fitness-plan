@@ -112,24 +112,24 @@ async function scenario(name, body) { await body(); console.log('PASS ' + name);
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); origin = 'http://127.0.0.1:' + server.address().port;
   browser = await playwright[engine].launch();
-  await scenario('old guest settings change only after clicking; history, dates, check-ins, other scopes and A/C values are preserved', async () => {
+  await scenario('original legacy guest settings correct automatically; history, dates, check-ins, other scopes and A/C values are preserved', async () => {
     const scope = 'guest', other = 'user:' + B, fixture = legacy(), d = await device({ seed: { ...fixture, ...inactive(other, '9') } });
     const initial = await settings(d.page, scope);
-    assert.equal(initial['chest.seat'], '2'); assert.equal(initial['triceps.seat'], '7'); assert.equal(initial['triceps.adjustment'], 'D');
+    assert.equal(initial['chest.seat'], '7'); assert.equal(initial['triceps.seat'], '2'); assert.equal(initial['triceps.adjustment'], '');
     const before = await snapshot(d.page, scope, [other]);
     assert.equal(before.protectedValues[HISTORY], history); assert.equal(before.protectedValues[ROTATION], rotation); assert.equal(before.protectedValues[DONE], 'yes');
-    await apply(d.page); await assertCorrected(d.page, scope);
+    await assertCorrected(d.page, scope);
     assert.deepEqual(await snapshot(d.page, scope, [other]), before, 'only the four correction settings may change');
     assert.equal(await d.page.locator('#mon-chest input.load').inputValue(), '7.5'); assert.equal(await d.page.locator('#mon-triceps input.load').inputValue(), '');
     assert.equal(await d.page.locator('#mon-chest .done').isChecked(), true);
     await d.page.reload(); await d.page.waitForFunction(() => document.querySelector('#runtimeStatus').classList.contains('runtime-ready'));
     await assertCorrected(d.page, scope); assert.deepEqual(await snapshot(d.page, scope, [other]), before); await d.close();
   });
-  await scenario('a signed-in account correction leaves guest and other account values unchanged', async () => {
+  await scenario('original signed-in legacy owner corrects automatically and leaves guest and other account values unchanged', async () => {
     const scope = 'user:' + A, other = 'user:' + B;
     const d = await device({ userId: A, seed: { ...legacy(), 'gym-compatible.sync-owner.v1': A, ...inactive('guest', '3'), ...inactive(other, '9') } });
     const before = await snapshot(d.page, scope, ['guest', other]);
-    await apply(d.page); await assertCorrected(d.page, scope);
+    await assertCorrected(d.page, scope);
     assert.deepEqual(await snapshot(d.page, scope, ['guest', other]), before); await d.close();
   });
   await scenario('a custom triceps adjustment E and unknown chest/triceps weights are retained', async () => {
@@ -148,8 +148,32 @@ async function scenario(name, body) { await body(); console.log('PASS ' + name);
     assert.deepEqual(await snapshot(d.page, 'guest'), before);
     assert.equal(await d.page.evaluate(() => Array.from({ length: localStorage.length }, (_, n) => localStorage.key(n)).some(key => key.includes('.undefined'))), false); await d.close();
   });
+  await scenario('independent scopes matching old seat numbers are not auto-corrected without legacy provenance', async () => {
+    const p = prefix('guest');
+    const seed = { ...inactive('guest', '2', 'D'), [p + SETTING + 'triceps.seat']: '7' };
+    const d = await device({ seed });
+    assert.equal((await settings(d.page, 'guest'))['chest.seat'], '2');
+    assert.equal((await settings(d.page, 'guest'))['triceps.seat'], '7');
+    await d.close();
+  });
+  await scenario('automatic correction runs once and later personal edits survive reload', async () => {
+    const d = await device({ seed: legacy() });
+    await assertCorrected(d.page, 'guest');
+    await d.page.locator('#mon-chest .setting-editor > summary').click();
+    await d.page.locator('#mon-triceps .setting-editor > summary').click();
+    await d.page.locator('#mon-chest [data-setting="chest.seat"]').fill('2');
+    await d.page.locator('#mon-triceps [data-setting="triceps.seat"]').fill('7');
+    await d.page.reload(); await d.page.waitForFunction(() => document.querySelector('#runtimeStatus').classList.contains('runtime-ready'));
+    assert.equal((await settings(d.page, 'guest'))['chest.seat'], '2');
+    assert.equal((await settings(d.page, 'guest'))['triceps.seat'], '7');
+    await d.close();
+  });
   await scenario('without JavaScript the correction explanation and corrected photos expand natively', async () => {
     const d = await device({ javaScriptEnabled: false });
+    for (const id of ['mon-pulldown', 'fri-pulldown']) {
+      assert.equal(await d.page.locator('#' + id + ' .fixed-settings').count(), 0, 'pulldown needs no adjustment record');
+      assert.equal(await d.page.locator('#' + id + ' [data-last-weight="pulldown"]').count(), 1, 'weight/date record remains available');
+    }
     await d.page.locator('#equipmentCorrection > summary').click();
     assert.match(await d.page.locator('#equipmentCorrection').textContent(), /胸推机：座位7、调节D；三头肌机：座位2/);
     assert.equal(await d.page.locator('#applySettingCorrection').isDisabled(), true);
@@ -166,7 +190,7 @@ async function scenario(name, body) { await body(); console.log('PASS ' + name);
     await d.page.waitForFunction(() => { const image = document.querySelector('#mon-triceps .setting-photos img'); return image.complete && image.naturalWidth > 0; });
     await d.close();
   });
-  console.log(engine + ': 5 photo correction scenarios passed (synthetic local data; Auth and cloud fully mocked).');
+  console.log(engine + ': 7 photo correction scenarios passed (synthetic local data; Auth and cloud fully mocked).');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   for (const context of contexts) await context.close(); if (browser) await browser.close(); if (server) server.close();
 });

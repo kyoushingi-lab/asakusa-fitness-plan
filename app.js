@@ -1,10 +1,11 @@
 
 (async function () {
   'use strict';
-  var fields={pulldown:['position'],row:['fore_aft','height'],chest:['seat','adjustment'],triceps:['seat'],abs:['height'],glute:['position'],legpress:['position'],legcurl:['roller','start'],abductor:['position']};
+  var fields={row:['fore_aft','height'],chest:['seat','adjustment'],triceps:['seat'],abs:['height'],glute:['position'],legpress:['position'],legcurl:['roller','start'],abductor:['position']};
   var seedSettings={},settingInputs=[];
   document.querySelectorAll('[data-machine-profile]').forEach(function(profile,index){
     var machine=profile.dataset.machineProfile,box=profile.querySelector('.fixed-settings');
+    if(!box)return;
     var editor=document.createElement('details');editor.className='setting-editor';
     var summary=document.createElement('summary');summary.textContent='修改我的设置';editor.appendChild(summary);
     box.querySelectorAll('dl>div').forEach(function(row,position){
@@ -299,7 +300,9 @@
   function write(key,value){accountStore.set(key,value);storageMessage();}
   function refreshSettings(){settingInputs.forEach(function(input){var value=read('gym-compatible.setting.'+input.dataset.setting)||'';if(document.activeElement!==input)input.value=value;document.querySelectorAll('[data-setting-value="'+input.dataset.setting+'"]').forEach(function(dd){dd.textContent=value||'待记录';});});}
   settingInputs.forEach(function(input){input.addEventListener('input',function(){write('gym-compatible.setting.'+this.dataset.setting,this.value);refreshSettings();});});
+  var photoSettingsCorrected=accountStore.correctLegacyPhotoSettings();
   refreshSettings();
+  if(photoSettingsCorrected)document.getElementById('settingCorrectionStatus').textContent='已自动更正旧档位：胸推7 / D，三头肌2。重量、日期和打卡未改动。';
   var correctionButton=document.getElementById('applySettingCorrection');
   if(correctionButton){
     correctionButton.disabled=false;
