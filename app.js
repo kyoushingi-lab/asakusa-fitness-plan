@@ -386,8 +386,8 @@
   var segments = [
     { name: '热身', grade: 3, speed: 4, seconds: 360 },
     { name: '上坡①', grade: 7, speed: 5, seconds: 360 },
-    { name: '上坡②', grade: 5, speed: 6, seconds: 600 },
-    { name: '上坡③', grade: 10, speed: 4.5, seconds: 240 },
+    { name: '上坡②', grade: 5, speed: 5, seconds: 600 },
+    { name: '上坡③', grade: 8, speed: 4, seconds: 240 },
     { name: '放松', grade: 0, speed: 3.5, seconds: 240 }
   ];
   var phases = [], total = 0, exerciseTotal = 1800000;

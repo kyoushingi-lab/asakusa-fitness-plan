@@ -42,7 +42,7 @@ async function main(){
   });
   await test('all four gaps preserve thirty minutes of exercise and finish at thirty-forty',async page=>{
     await page.locator('#play').tap();
-    for(const [jump,stage,grade,speed] of [[360000,2,'7','5'],[370000,3,'5','6'],[610000,4,'10','4.5'],[250000,5,'0','3.5']]){
+    for(const [jump,stage,grade,speed] of [[360000,2,'7','5'],[370000,3,'5','5'],[610000,4,'8','4'],[250000,5,'0','3.5']]){
       await page.clock.fastForward(jump);assert.match(await txt(page,'#timerLabel'),new RegExp('调整参数.*第'+stage+'/5段'));
       assert.equal(await txt(page,'#clock'),'00:10');assert.equal(await txt(page,'#timerGrade'),grade);assert.equal(await txt(page,'#timerSpeed'),speed);
     }
