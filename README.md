@@ -1,6 +1,6 @@
 # 浅草健身计划
 
-网页：<https://kyoushingi-lab.github.io/asakusa-fitness-plan/>
+网页：<https://yuureijinkou-lab.github.io/asakusa-fitness-plan/>
 
 手机训练计划与个人记录本：灵活 A→B→C 循环、9 种器械图文和视频、训练日历、重量历史、打卡、器械设置、爬坡计时与饮食建议。每周两次也可接着循环，不固定星期。
 
