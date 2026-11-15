@@ -26,7 +26,7 @@ function session(uid) {
 function mockSDK() {
   const key = '__fitness_accounts_test.session';
   const handlers = new Set();
-  const requests = { email: [], anonymous: 0, createUser: 0, logout: [] };
+  const requests = { email: [], changes: [], anonymous: 0, createUser: 0, logout: [] };
   function read() { const value = localStorage.getItem(key); return value ? JSON.parse(value) : null; }
   function emit(next, event) {
     if (next) localStorage.setItem(key, JSON.stringify(next)); else localStorage.removeItem(key);
@@ -47,6 +47,11 @@ function mockSDK() {
       auth: {
         getSession: async () => ({ data: { session: read() }, error: null }),
         getUser: async () => ({ data: { user: read() && read().user }, error: null }),
+        async updateUser(attributes, options) {
+          requests.changes.push({attributes, options, uid:read() && read().user.id});
+          if(window.__fitnessAccountsAuth.failEmailChange)return {data:{user:null},error:{message:'Synthetic SMTP failure'}};
+          return {data:{user:read().user},error:null};
+        },
         onAuthStateChange(fn) { handlers.add(fn); return { data: { subscription: { unsubscribe() { handlers.delete(fn); } } } }; },
         async signInWithOtp(payload) { requests.email.push(payload); return { data: { user: null, session: null }, error: null }; },
         async signInAnonymously() { requests.anonymous++; throw Error('Guests must remain local'); },
@@ -165,7 +170,7 @@ async function login(page, uid, withEvent = true) {
   await loggedIn(page, uid);
 }
 async function logout(page) { await accountOptions(page); await page.locator('#syncLogout').click(); await guest(page); }
-async function scenario(name, fn) { await fn(); console.log('PASS ' + name); }
+async function scenario(name, fn) { if(process.argv[3]&&!name.includes(process.argv[3]))return; await fn(); console.log('PASS ' + name); }
 (async () => {
   server = http.createServer((request, response) => {
     const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
@@ -335,7 +340,48 @@ async function scenario(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.equal(await existing.page.locator('#syncLogin').isVisible(), false);
     assert.equal(await existing.page.evaluate(() => window.__fitnessAccountsAuth.requests.email.length), 0); await existing.close();
   });
-  console.log(engine + ': 9 account browser scenarios passed (synthetic fixtures, mocked SDK Auth and database).');
+  await scenario('guest cannot change email and no account is created', async () => {
+    const d=await device(database()); await guest(d.page); await accountOptions(d.page);
+    assert.equal(await d.page.locator('#emailChangePanel').isVisible(),false);
+    assert.equal(await d.page.locator('#newAccountEmail').isDisabled(),true);
+    assert.equal(await d.page.evaluate(()=>window.__fitnessAccountsAuth.requests.changes.length),0); await d.close();
+  });
+  await scenario('signed-in email change requests verification for the same user without changing records', async () => {
+    const db=database();db.weights.push(weight(A,'email-fixture','row',12.5));db.state.push(state(A,'setting','chest.seat','7'));
+    const d=await device(db,A,{emailLoginPaused:true});await loggedIn(d.page,A);await synced(d.page);
+    const before=clone({weights:db.weights,state:db.state});
+    await accountOptions(d.page);await d.page.locator('#emailChangePanel > summary').click();
+    await d.page.locator('#newAccountEmail').fill(email(A));await d.page.locator('#requestEmailChange').click();
+    assert.equal(await d.page.evaluate(()=>window.__fitnessAccountsAuth.requests.changes.length),0,'same email is not submitted');
+    await d.page.locator('#newAccountEmail').fill('new-owner@example.invalid');await d.page.locator('#requestEmailChange').click();
+    await d.page.waitForFunction(()=>document.querySelector('#emailChangeStatus').textContent.includes('验证'));
+    assert.deepEqual(await d.page.evaluate(()=>window.__fitnessAccountsAuth.requests.changes),[{attributes:{email:'new-owner@example.invalid'},options:{emailRedirectTo:origin+'/#sync'},uid:A}]);
+    assert.match(await d.page.locator('#accountName').textContent(),/account-a@example.invalid/,'verification request does not claim completion');
+    assert.deepEqual({weights:db.weights,state:db.state},before);assert.equal(await d.page.locator('#mon-row input.load').inputValue(),'12.5');
+    await d.close();
+  });
+  await scenario('email delivery failure keeps the old account and records usable', async () => {
+    const db=database(),d=await device(db,A);await loggedIn(d.page,A);
+    await d.page.evaluate(()=>window.__fitnessAccountsAuth.failEmailChange=true);
+    await accountOptions(d.page);await d.page.locator('#emailChangePanel > summary').click();
+    await d.page.locator('#newAccountEmail').fill('new-owner@example.invalid');await d.page.locator('#requestEmailChange').click();
+    await d.page.waitForFunction(()=>document.querySelector('#emailChangeStatus').textContent.includes('未完成'));
+    assert.match(await d.page.locator('#accountName').textContent(),/account-a@example.invalid/);
+    assert.equal(await d.page.locator('#requestEmailChange').isEnabled(),true);
+    assert.equal(await d.page.evaluate(()=>window.__fitnessAccountsAuth.read().user.id),A);
+    assert.equal(await d.page.evaluate(()=>window.__fitnessAccountsAuth.requests.createUser),0);await d.close();
+  });
+  await scenario('confirmed same-user email change updates displayed email without switching record scopes', async () => {
+    const db=database();db.weights.push(weight(A,'confirmed-email-fixture','row',12.5));
+    const d=await device(db,A);await loggedIn(d.page,A);await synced(d.page);
+    await d.page.evaluate(()=>{const auth=window.__fitnessAccountsAuth,s=auth.read();s.user.email='new-owner@example.invalid';auth.emit(s,'USER_UPDATED');});
+    await d.page.waitForFunction(()=>document.querySelector('#accountName').textContent==='new-owner@example.invalid');
+    assert.match(await d.page.locator('#historyRows').textContent(),/12.5/);
+    assert.equal(await d.page.evaluate(()=>window.__fitnessAccountsAuth.read().user.id),A);
+    await sync(d.page);assert.ok(db.calls.every(call=>call.uid===A));
+    await d.close();
+  });
+  console.log(engine + ': 13 account browser scenarios passed (synthetic fixtures, mocked SDK Auth and database).');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   for (const context of contexts) await context.close(); if (browser) await browser.close(); if (server) server.close();
 });

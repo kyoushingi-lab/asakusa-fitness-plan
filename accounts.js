@@ -13,7 +13,13 @@
         client=root.supabase.createClient(config.url,config.key);
         client.auth.onAuthStateChange(function(event,session){
           var next=session&&session.user||null;observed=true;observedUser=next;
-          if(!initializing && (next&&next.id||null)!==(user&&user.id||null))freeze();
+          if(!initializing){
+            if((next&&next.id||null)!==(user&&user.id||null))freeze();
+            else if(next&&user){
+              var changedEmail=next.email!==user.email;user=next;identityText();
+              if(changedEmail)text('emailChangeStatus','登录邮箱已更新。仍是原账号，训练记录继续保留。');
+            }
+          }
         });
         var result=await client.auth.getSession();
         if(result.error)throw result.error;
@@ -41,13 +47,46 @@
       root.location.reload();
     }
     text('accountMode',user?'已登录 · 独立账号':'游客模式 · 仅保存在这台设备');
-    text('accountName',user?(user.email||'我的账号'):'无需注册，直接开始训练');
-    text('syncAccount',user?'当前账号：'+(user.email||'已登录'):'游客记录不会自动上传；登录后可自行选择导入。');
+    function identityText(){
+      text('accountName',user?(user.email||'我的账号'):'无需注册，直接开始训练');
+      text('syncAccount',user?'当前账号：'+(user.email||'已登录'):'游客记录不会自动上传；登录后可自行选择导入。');
+      text('emailChangeCurrent',user?user.email||'当前账号':'');
+    }
+    identityText();
     if(form)form.hidden=!!user||emailPaused;
-    text('accountOptionsLabel',user?'查看同步状态 / 退出账号':emailPaused?'账号与同步 · 邮箱登录暂缓':'邮箱登录 / 账号同步');
+    text('accountOptionsLabel',user?'账号设置 / 更换邮箱 / 同步':emailPaused?'账号与同步 · 邮箱登录暂缓':'邮箱登录 / 账号同步');
     text('emailPausedNote',emailPaused?'邮箱登录暂缓配置。你可以直接训练，记录会自动保存在当前浏览器。':'登录后可在手机和电脑之间同步；游客记录需要手动选择导入。');
     if(logout)logout.hidden=!user;
     if(manual)manual.disabled=!user;
+    var changePanel=document.getElementById('emailChangePanel'),changeForm=document.getElementById('emailChangeForm');
+    var newEmail=document.getElementById('newAccountEmail'),changeSend=document.getElementById('requestEmailChange'),requestingEmail=false;
+    if(changePanel)changePanel.hidden=!user||!client;
+    if(user&&client&&changeForm){
+      newEmail.disabled=false;changeSend.disabled=false;
+      changeForm.addEventListener('submit',async function(event){
+        event.preventDefault();
+        if(changing||requestingEmail||!changeForm.reportValidity())return;
+        var desired=newEmail.value.trim(),ownerId=user.id;
+        if(desired.toLowerCase()===(user.email||'').toLowerCase()){text('emailChangeStatus','这已经是当前登录邮箱，请填写新的邮箱。');return;}
+        requestingEmail=true;changeSend.disabled=true;newEmail.disabled=true;
+        text('emailChangeStatus','正在向当前账号提交更换请求…');
+        try{
+          if(history)history.flush();
+          var verified=await client.auth.getUser();
+          if(changing)return;
+          if(verified.error||!verified.data||!verified.data.user||verified.data.user.id!==ownerId)throw Error('Session unavailable');
+          var response=await client.auth.updateUser({email:desired},{emailRedirectTo:root.location.origin+root.location.pathname+'#sync'});
+          if(changing)return;
+          if(response.error)throw response.error;
+          if(!response.data||!response.data.user||response.data.user.id!==ownerId)throw Error('Account mismatch');
+          text('emailChangeStatus',response.data.user.email===desired?'登录邮箱已更新。仍是原账号，训练记录继续保留。':'更换请求已提交，请检查旧邮箱和新邮箱，按收到的邮件完成验证。验证完成前不要退出原账号。');
+        }catch(error){
+          if(!changing)text('emailChangeStatus','邮箱更换未完成。请先不要退出原账号；可能是登录过期、邮箱已使用或发信服务暂不可用，原记录仍保留。');
+        }finally{
+          requestingEmail=false;if(!changing){newEmail.disabled=false;changeSend.disabled=false;}
+        }
+      });
+    }
     var guest=document.getElementById('guestContinue');
     if(guest){guest.hidden=!!user;guest.disabled=false;guest.addEventListener('click',function(){text('accountMode','游客模式 · 已启用');var panel=document.getElementById('cyclePanel');if(panel)panel.open=true;document.getElementById('cycle').scrollIntoView({behavior:'smooth',block:'start'});});}
     if(client && form && !emailPaused){

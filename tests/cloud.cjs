@@ -73,7 +73,14 @@ async function device(id = A, configuration = {}) {
       throw Error('Unexpected synthetic REST operation: ' + request.method() + ' ' + url.pathname);
     }
     if (url.pathname === '/auth/v1/otp') return route.fulfill({ contentType: 'application/json', body: '{}' });
-    if (url.pathname.endsWith('/user')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(session(uid || id || A).user) });
+    if (url.pathname.endsWith('/user')) {
+      if(request.method()==='PUT'){
+        assert.equal(uid,id,'email change must use the signed-in owner token');
+        assert.equal(request.postDataJSON().email,'new-owner@example.test');
+        assert.equal(url.searchParams.get('redirect_to'),origin+'/#sync');
+      }
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify(session(uid || id || A).user) });
+    }
     if (url.pathname.endsWith('/logout')) return route.fulfill({ status: 204, body: '' });
     throw Error('Unexpected Auth network call (all real mail/user creation is forbidden): ' + url.pathname);
   });
@@ -171,9 +178,21 @@ async function expose(locator) { await locator.evaluate(element => { let parent 
   assert.equal(requests.filter(request => request.path === '/auth/v1/otp').length, mailBefore); await pausedSession.close();
   console.log('PASS paused email hides the form, preserves guest history across reload, makes no OTP request and keeps existing sessions syncing');
 
+  const changer=await device(A,{emailLoginPaused:true});await synced(changer.p,4);
+  const unchanged=JSON.stringify({records,states});
+  await accountOptions(changer.p);await changer.p.locator('#emailChangePanel > summary').click();
+  await changer.p.locator('#newAccountEmail').fill('new-owner@example.test');
+  const changeRequest=changer.p.waitForRequest(r=>r.url().includes('/auth/v1/user')&&r.method()==='PUT');
+  await changer.p.locator('#requestEmailChange').click();await changeRequest;
+  await changer.p.waitForFunction(()=>document.querySelector('#emailChangeStatus').textContent.includes('验证'));
+  assert.equal(await changer.p.locator('#accountName').textContent(),'fitness@example.test');
+  assert.equal(JSON.stringify({records,states}),unchanged,'email request does not recreate or move any training record');
+  await changer.p.screenshot({path:path.join(__dirname,'../test-results/email-change-'+engine+'.png')});
+  await changer.close();console.log('PASS real SDK email-change request keeps owner token, requests verification and preserves records');
+
   await expose(b.p.locator('#syncNow')); await b.p.locator('#sync').scrollIntoViewIfNeeded();
   await b.p.screenshot({ path: path.join(__dirname, '../test-results/sync-' + engine + '.png') });
-  await a.close(); await b.close(); console.log(engine + ': 8 cloud integration scenarios passed (simulated server, real vendored SDK).');
+  await a.close(); await b.close(); console.log(engine + ': 9 cloud integration scenarios passed (simulated server, real vendored SDK).');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   for (const context of contexts) await context.close(); if (browser) await browser.close(); if (server) server.close();
 });

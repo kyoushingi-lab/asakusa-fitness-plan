@@ -133,6 +133,7 @@ body.timer-focus-active{position:fixed;width:100%;height:100%;overflow:hidden;ov
 .machine-profile{margin:0 0 1rem;padding:1rem;border:1px solid var(--line,#d2e0d6);border-radius:15px;background:#f3f8f3}
 .profile-columns{display:grid;grid-template-columns:1fr 1fr;gap:1rem}.profile-columns>div{min-width:0}
 .no-adjustment .profile-columns{grid-template-columns:1fr}
+.email-change{border-top:1px solid #d2e0d6;padding-top:.6rem;margin-top:1rem}.email-change>summary{min-height:48px;cursor:pointer;font-weight:700;padding:.6rem 0}#emailChangeForm{display:grid;gap:10px;margin:14px 0}#emailChangeForm label{font-weight:700}#emailChangeForm input{width:100%;min-width:0;min-height:48px;border:1px solid #c7dbcc;border-radius:9px;padding:10px;font-size:16px}#emailChangeForm button{min-height:48px}#emailChangeStatus{overflow-wrap:anywhere}.email-change[hidden]{display:none}
 .machine-profile h3{margin:0 0 .55rem;font-size:1rem;line-height:1.45}.fixed-settings dl{margin:0;display:grid;gap:.4rem}.fixed-settings dl>div{display:flex;flex-wrap:wrap;gap:.35rem .75rem;align-items:baseline}.fixed-settings dt{font-size:.9rem;color:#5b7169}.fixed-settings dd{margin:0;font-size:1.1rem;font-weight:750}
 .last-training p{margin:.15rem 0}.last-training strong{font-size:1.3rem}.last-training small{display:block;color:#5b7169;line-height:1.55}.profile-help{font-size:.82rem;line-height:1.7;margin:.8rem 0 0;color:#5b7169}
 .model-status{font-size:.86rem;line-height:1.7;margin:.65rem 0 1rem}.model-confirmed strong{color:#356e55}
