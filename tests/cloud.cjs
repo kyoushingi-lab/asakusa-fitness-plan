@@ -73,6 +73,12 @@ async function device(id = A, configuration = {}) {
       throw Error('Unexpected synthetic REST operation: ' + request.method() + ' ' + url.pathname);
     }
     if (url.pathname === '/auth/v1/otp') return route.fulfill({ contentType: 'application/json', body: '{}' });
+    if (url.pathname === '/auth/v1/token' && url.searchParams.get('grant_type') === 'password') {
+      const payload=request.postDataJSON();
+      if(configuration.passwordDelay)await new Promise(resolve=>setTimeout(resolve,configuration.passwordDelay));
+      if(payload.email!==email(B)||payload.password!=='Synthetic-Password-Only!')return route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({code:'invalid_credentials',msg:'Invalid login credentials'})});
+      return route.fulfill({contentType:'application/json',body:JSON.stringify(session(B))});
+    }
     if (url.pathname.endsWith('/user')) {
       if(request.method()==='PUT'){
         assert.equal(uid,id,'email change must use the signed-in owner token');
@@ -190,9 +196,46 @@ async function expose(locator) { await locator.evaluate(element => { let parent 
   await changer.p.screenshot({path:path.join(__dirname,'../test-results/email-change-'+engine+'.png')});
   await changer.close();console.log('PASS real SDK email-change request keeps owner token, requests verification and preserves records');
 
+  const passwordDevice=await device(null,{emailLoginPaused:true,passwordLoginEnabled:true,passwordDelay:300});
+  await passwordDevice.p.locator('#mon-row input.load').fill('31.25');await passwordDevice.p.locator('#mon-row input.load').blur();
+  await accountOptions(passwordDevice.p);
+  assert.equal(await passwordDevice.p.locator('#passwordLogin').isVisible(),true,'password login works while mail is paused');
+  assert.equal(await passwordDevice.p.locator('#syncLogin').isVisible(),false);
+  await passwordDevice.p.locator('#passwordEmail').fill('  friend@example.test  ');
+  await passwordDevice.p.locator('#passwordValue').fill('wrong');
+  await passwordDevice.p.locator('#passwordSubmit').click();
+  await passwordDevice.p.waitForFunction(()=>document.querySelector('#syncStatus').textContent.includes('登录未成功'));
+  assert.equal(await passwordDevice.p.locator('#passwordValue').inputValue(),'');
+  assert.equal(await passwordDevice.p.locator('#passwordSubmit').isEnabled(),true);
+  assert.equal(await passwordDevice.p.locator('#mon-row input.load').inputValue(),'31.25');
+  assert.match(await passwordDevice.p.locator('#accountMode').textContent(),/游客/);
+  console.log('PASS wrong password leaves guest records usable and permits retry');
+  await passwordDevice.p.locator('#passwordValue').fill('Synthetic-Password-Only!');
+  const passwordBefore=requests.filter(r=>r.path==='/auth/v1/token').length;
+  await passwordDevice.p.locator('#passwordSubmit').click();
+  await passwordDevice.p.locator('#passwordLogin').dispatchEvent('submit');
+  await synced(passwordDevice.p,1);
+  assert.equal(requests.filter(r=>r.path==='/auth/v1/token').length,passwordBefore+1);
+  assert.equal(await passwordDevice.p.locator('#accountName').textContent(),'friend@example.test');
+  assert.equal(await passwordDevice.p.locator('#mon-chest input.load').inputValue(),'22.5');
+  assert.equal(await passwordDevice.p.locator('#mon-row input.load').inputValue(),'');
+  assert.equal(await passwordDevice.p.locator('#historyRows tr').count(),1);
+  assert.deepEqual(privateWeights(A),originalA);
+  assert.equal(requests.filter(r=>r.path==='/auth/v1/otp').length,mailBefore);
+  assert.equal(await passwordDevice.p.evaluate(()=>Object.values(localStorage).some(v=>v.includes('Synthetic-Password-Only!'))),false);
+  await accountOptions(passwordDevice.p);await passwordDevice.p.locator('#syncLogout').click();
+  await passwordDevice.p.waitForFunction(()=>document.querySelector('#accountMode').textContent.includes('游客'));
+  assert.equal(await passwordDevice.p.locator('#mon-row input.load').inputValue(),'31.25');
+  await passwordDevice.close();console.log('PASS password login isolates account data, blocks duplicate submits and retains guest records on logout');
+
+  const disabledPassword=await device(null,{emailLoginPaused:true});await accountOptions(disabledPassword.p);
+  assert.equal(await disabledPassword.p.locator('#passwordLogin').isVisible(),false);
+  assert.equal(await disabledPassword.p.locator('#passwordSubmit').isDisabled(),true);
+  await disabledPassword.close();console.log('PASS password login stays unavailable without explicit configuration');
+
   await expose(b.p.locator('#syncNow')); await b.p.locator('#sync').scrollIntoViewIfNeeded();
   await b.p.screenshot({ path: path.join(__dirname, '../test-results/sync-' + engine + '.png') });
-  await a.close(); await b.close(); console.log(engine + ': 9 cloud integration scenarios passed (simulated server, real vendored SDK).');
+  await a.close(); await b.close(); console.log(engine + ': 12 cloud integration scenarios passed (simulated server, real vendored SDK).');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   for (const context of contexts) await context.close(); if (browser) await browser.close(); if (server) server.close();
 });
