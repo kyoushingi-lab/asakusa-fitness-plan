@@ -156,3 +156,6 @@ body.timer-focus-active{position:fixed;width:100%;height:100%;overflow:hidden;ov
 .setting-correction>summary{padding:12px 0;min-height:48px;font-weight:700;cursor:pointer;color:#285b45}
 .setting-correction p{margin:0 0 12px;line-height:1.65}.setting-correction button{min-height:48px;padding:10px 14px;border:1px solid #356e55;border-radius:9px;color:#fff;background:#356e55;font-weight:700;margin-bottom:12px}
 .home-screen-help{margin:12px 0;color:var(--sub);font-size:13px}.home-screen-help>summary{min-height:44px;padding:10px 0;cursor:pointer;font-weight:700;color:#356e55}.home-screen-help p{margin:0 0 9px;line-height:1.7}
+
+/* Password login on narrow phones. */
+#passwordLogin{display:grid;gap:10px;margin:1rem 0}#passwordLogin h3{margin:0 0 .3rem}#passwordLogin label{font-weight:700}#passwordLogin input{width:100%;min-width:0;min-height:48px;border:1px solid #c7dbcc;border-radius:9px;padding:10px;font-size:16px}#passwordLogin button{min-height:48px}#passwordLogin p{margin:0}

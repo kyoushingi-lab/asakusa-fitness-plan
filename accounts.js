@@ -28,6 +28,9 @@
     }
     if(observed)user=observedUser;initializing=false;
     var emailPaused=!client || config.emailLoginPaused===true;
+    var passwordForm=document.getElementById('passwordLogin'),passwordEmail=document.getElementById('passwordEmail');
+    var passwordValue=document.getElementById('passwordValue'),passwordSubmit=document.getElementById('passwordSubmit');
+    var passwordEnabled=!!client&&config.passwordLoginEnabled===true,signingIn=false;
     if(!root.GymAccountStore)throw Error('Account storage unavailable');
     var store=root.GymAccountStore.create({scope:user?'user:'+user.id:'guest',seedSettings:options.seedSettings});
     function importing(){
@@ -54,8 +57,30 @@
     }
     identityText();
     if(form)form.hidden=!!user||emailPaused;
-    text('accountOptionsLabel',user?'账号设置 / 更换邮箱 / 同步':emailPaused?'账号与同步 · 邮箱登录暂缓':'邮箱登录 / 账号同步');
-    text('emailPausedNote',emailPaused?'邮箱登录暂缓配置。你可以直接训练，记录会自动保存在当前浏览器。':'登录后可在手机和电脑之间同步；游客记录需要手动选择导入。');
+    if(passwordForm)passwordForm.hidden=!!user||!passwordEnabled;
+    text('accountOptionsLabel',user?'账号设置 / 更换邮箱 / 同步':passwordEnabled?'邮箱＋密码登录 / 账号同步':emailPaused?'账号与同步 · 邮箱登录暂缓':'邮箱登录 / 账号同步');
+    text('emailPausedNote',passwordEnabled?'使用已创建的邮箱和密码登录，无需接收邮件。游客记录仅在你选择导入后合并。':emailPaused?'邮箱登录暂缓配置。你可以直接训练，记录会自动保存在当前浏览器。':'登录后可在手机和电脑之间同步；游客记录需要手动选择导入。');
+    if(passwordForm&&passwordEnabled&&!user){
+      passwordEmail.disabled=false;passwordValue.disabled=false;passwordSubmit.disabled=false;
+      passwordForm.addEventListener('submit',async function(event){
+        event.preventDefault();
+        if(changing||signingIn||!passwordForm.reportValidity())return;
+        signingIn=true;passwordSubmit.disabled=true;passwordEmail.disabled=true;passwordValue.disabled=true;
+        status('正在登录…');
+        try{
+          if(history)history.flush();
+          var response=await client.auth.signInWithPassword({email:passwordEmail.value.trim(),password:passwordValue.value});
+          if(response.error||!response.data||!response.data.session||!response.data.user)throw Error('Login unavailable');
+          // Auth events normally freeze/reload first; keep a fallback for the same result.
+          if(!changing)freeze();
+        }catch(error){
+          if(!changing)status('登录未成功。请检查邮箱和密码；账号被停用或网络不可用时也无法登录。游客记录仍保留。');
+        }finally{
+          passwordValue.value='';signingIn=false;
+          if(!changing){passwordSubmit.disabled=false;passwordEmail.disabled=false;passwordValue.disabled=false;}
+        }
+      });
+    }
     if(logout)logout.hidden=!user;
     if(manual)manual.disabled=!user;
     var changePanel=document.getElementById('emailChangePanel'),changeForm=document.getElementById('emailChangeForm');
